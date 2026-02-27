@@ -52,6 +52,7 @@
 	"dependencies": {
 		"c12": "^3.3.3",
 		"citty": "^0.2.1",
+		"consola": "^3.4.2",
 		"jiti": "^2.6.1",
 		"picocolors": "^1.1.1",
 		"yaml": "^2.8.2",
@@ -64,6 +65,9 @@
 		"vitest": "^4.0.18"
 	},
 	"pnpm": {
-		"onlyBuiltDependencies": ["esbuild", "@biomejs/biome"]
+		"onlyBuiltDependencies": [
+			"esbuild",
+			"@biomejs/biome"
+		]
 	}
 }

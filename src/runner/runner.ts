@@ -13,25 +13,66 @@ import type {
 import { VERSION } from "../index.js";
 import { evaluateGates } from "./gate.js";
 import { runGraderPipeline } from "./pipeline.js";
+import { computeAllTrialStats } from "./statistics.js";
 
 const SCHEMA_VERSION = "1.0.0";
 
+interface TrialWorkItem {
+	readonly testCase: Case;
+	readonly trialIndex: number;
+}
+
 /**
- * Executes a suite against the target function in live mode.
- * Runs cases sequentially, grades each, and aggregates into a Run artifact.
+ * Executes a suite against the target function.
+ * Supports trials, concurrency, rate limiting, and abort signals.
  */
 export async function runSuite(suite: ResolvedSuite, options: RunOptions): Promise<Run> {
 	const runId = randomUUID();
 	const startTime = Date.now();
-	const trials: Trial[] = [];
+	const trialCount = options.trials ?? 1;
 
-	for (const testCase of suite.cases) {
-		const trial = await executeCase(testCase, suite, options);
-		trials.push(trial);
+	const workItems = expandTrials(suite.cases, trialCount);
+	let aborted = false;
+
+	const trials: Trial[] = await concurrentMap(
+		workItems,
+		async (item) => {
+			if (options.signal?.aborted) {
+				aborted = true;
+				return null;
+			}
+
+			if (options.rateLimiter && options.mode === "live") {
+				await options.rateLimiter.acquire(options.signal);
+			}
+
+			return executeCase(item.testCase, suite, options, item.trialIndex);
+		},
+		options.concurrency ?? 1,
+		options.signal,
+	);
+
+	// Check if abort happened during execution
+	if (options.signal?.aborted) {
+		aborted = true;
 	}
 
+	// Sort trials deterministically by (caseId, trialIndex)
+	trials.sort((a, b) => {
+		const caseCompare = a.caseId < b.caseId ? -1 : a.caseId > b.caseId ? 1 : 0;
+		if (caseCompare !== 0) return caseCompare;
+		return (a.trialIndex ?? 0) - (b.trialIndex ?? 0);
+	});
+
 	const totalDurationMs = Date.now() - startTime;
-	const partialSummary = computePartialSummary(trials, suite.cases, totalDurationMs);
+	const trialStats = computeAllTrialStats(trials, options.trials);
+	const partialSummary = computePartialSummary(
+		trials,
+		suite.cases,
+		totalDurationMs,
+		trialStats,
+		aborted,
+	);
 	const gateResult = evaluateGates(partialSummary, suite.gates);
 
 	const summary: RunSummary = {
@@ -52,16 +93,62 @@ export async function runSuite(suite: ResolvedSuite, options: RunOptions): Promi
 	};
 }
 
+function expandTrials(cases: readonly Case[], trialCount: number): readonly TrialWorkItem[] {
+	const items: TrialWorkItem[] = [];
+	for (const testCase of cases) {
+		for (let i = 0; i < trialCount; i++) {
+			items.push({ testCase, trialIndex: i });
+		}
+	}
+	return items;
+}
+
+/**
+ * Run items concurrently with bounded parallelism.
+ * Returns completed results (nulls from aborted items are filtered out).
+ */
+async function concurrentMap<TIn, TOut>(
+	items: readonly TIn[],
+	fn: (item: TIn) => Promise<TOut | null>,
+	concurrency: number,
+	signal?: AbortSignal,
+): Promise<TOut[]> {
+	const results: TOut[] = [];
+	let index = 0;
+
+	async function worker(): Promise<void> {
+		while (index < items.length) {
+			if (signal?.aborted) return;
+			const currentIndex = index++;
+			const item = items[currentIndex];
+			if (!item) return;
+			const result = await fn(item);
+			if (result !== null) {
+				results.push(result);
+			}
+		}
+	}
+
+	const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
+	await Promise.all(workers);
+	return results;
+}
+
 async function executeCase(
 	testCase: Case,
 	suite: ResolvedSuite,
 	options: RunOptions,
+	trialIndex: number,
 ): Promise<Trial> {
 	const caseStart = Date.now();
 
 	let output: TargetOutput;
 	try {
-		output = await withTimeout(() => suite.target(testCase.input), options.timeoutMs);
+		output = await withTimeout(
+			() => suite.target(testCase.input),
+			options.timeoutMs,
+			options.signal,
+		);
 	} catch (err) {
 		const durationMs = Date.now() - caseStart;
 		const message = err instanceof Error ? err.message : String(err);
@@ -75,6 +162,7 @@ async function executeCase(
 			grades: [],
 			score: 0,
 			durationMs,
+			trialIndex: options.trials && options.trials > 1 ? trialIndex : undefined,
 		};
 	}
 
@@ -82,7 +170,7 @@ async function executeCase(
 	const pipelineResult = await runGraderPipeline(
 		output,
 		testCase.expected,
-		undefined, // Case-level graders come from config; not in Case schema
+		undefined,
 		suite.defaultGraders,
 		{
 			caseId: testCase.id,
@@ -100,25 +188,39 @@ async function executeCase(
 		grades: pipelineResult.grades,
 		score: pipelineResult.caseResult.score,
 		durationMs,
+		trialIndex: options.trials && options.trials > 1 ? trialIndex : undefined,
 	};
 }
 
-async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(
+	fn: () => Promise<T>,
+	timeoutMs: number,
+	signal?: AbortSignal,
+): Promise<T> {
+	if (signal?.aborted) {
+		throw new Error("Aborted");
+	}
+
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+	const onAbort = (): void => controller.abort();
+	signal?.addEventListener("abort", onAbort, { once: true });
 
 	try {
 		const result = await Promise.race([
 			fn(),
 			new Promise<never>((_, reject) => {
 				controller.signal.addEventListener("abort", () => {
-					reject(new Error(`Timeout after ${timeoutMs}ms`));
+					const reason = signal?.aborted ? "Aborted" : `Timeout after ${timeoutMs}ms`;
+					reject(new Error(reason));
 				});
 			}),
 		]);
 		return result;
 	} finally {
 		clearTimeout(timer);
+		signal?.removeEventListener("abort", onAbort);
 	}
 }
 
@@ -126,15 +228,48 @@ function computePartialSummary(
 	trials: readonly Trial[],
 	cases: readonly Case[],
 	totalDurationMs: number,
+	trialStats: Record<string, import("./statistics.js").TrialStats> | undefined,
+	aborted: boolean,
 ): Omit<RunSummary, "gateResult"> {
+	const totalCost = trials.reduce((sum, t) => sum + (t.output.cost ?? 0), 0);
+	const p95LatencyMs = computeP95(trials.map((t) => t.output.latencyMs));
+	const byCategory = computeByCategory(trials, cases, trialStats);
+
+	// When using trials (pass^k semantics), count unique cases
+	if (trialStats) {
+		const caseIds = [...new Set(trials.map((t) => t.caseId))];
+		const totalCases = caseIds.length;
+		const passed = caseIds.filter((id) => {
+			const stats = trialStats[id];
+			return stats && stats.passCount === stats.trialCount;
+		}).length;
+		const errored = caseIds.filter((id) => {
+			const stats = trialStats[id];
+			return stats && stats.errorCount === stats.trialCount;
+		}).length;
+		const failed = totalCases - passed - errored;
+
+		return {
+			totalCases,
+			passed,
+			failed,
+			errors: errored,
+			passRate: totalCases > 0 ? passed / totalCases : 0,
+			totalCost,
+			totalDurationMs,
+			p95LatencyMs,
+			byCategory: Object.keys(byCategory).length > 0 ? byCategory : undefined,
+			aborted: aborted || undefined,
+			trialStats,
+		};
+	}
+
+	// Single trial per case — original logic
 	const passed = trials.filter((t) => t.status === "pass").length;
 	const failed = trials.filter((t) => t.status === "fail").length;
 	const errors = trials.filter((t) => t.status === "error").length;
 	const totalCases = trials.length;
 	const passRate = totalCases > 0 ? passed / totalCases : 0;
-	const totalCost = trials.reduce((sum, t) => sum + (t.output.cost ?? 0), 0);
-	const p95LatencyMs = computeP95(trials.map((t) => t.output.latencyMs));
-	const byCategory = computeByCategory(trials, cases);
 
 	return {
 		totalCases,
@@ -146,6 +281,7 @@ function computePartialSummary(
 		totalDurationMs,
 		p95LatencyMs,
 		byCategory: Object.keys(byCategory).length > 0 ? byCategory : undefined,
+		aborted: aborted || undefined,
 	};
 }
 
@@ -159,6 +295,7 @@ function computeP95(values: readonly number[]): number {
 function computeByCategory(
 	trials: readonly Trial[],
 	cases: readonly Case[],
+	trialStats?: Record<string, import("./statistics.js").TrialStats> | undefined,
 ): Record<string, CategorySummary> {
 	const categoryMap = new Map<string, CaseCategory>();
 	for (const c of cases) {
@@ -174,19 +311,40 @@ function computeByCategory(
 		{ total: number; passed: number; failed: number; errors: number }
 	>();
 
-	for (const trial of trials) {
-		const category = categoryMap.get(trial.caseId);
-		if (category === undefined) continue;
+	if (trialStats) {
+		// Multi-trial: aggregate by unique case using pass^k semantics
+		const caseIds = [...new Set(trials.map((t) => t.caseId))];
+		for (const caseId of caseIds) {
+			const category = categoryMap.get(caseId);
+			if (category === undefined) continue;
 
-		let bucket = buckets.get(category);
-		if (bucket === undefined) {
-			bucket = { total: 0, passed: 0, failed: 0, errors: 0 };
-			buckets.set(category, bucket);
+			let bucket = buckets.get(category);
+			if (bucket === undefined) {
+				bucket = { total: 0, passed: 0, failed: 0, errors: 0 };
+				buckets.set(category, bucket);
+			}
+			bucket.total += 1;
+			const stats = trialStats[caseId];
+			if (stats && stats.passCount === stats.trialCount) bucket.passed += 1;
+			else if (stats && stats.errorCount === stats.trialCount) bucket.errors += 1;
+			else bucket.failed += 1;
 		}
-		bucket.total += 1;
-		if (trial.status === "pass") bucket.passed += 1;
-		else if (trial.status === "fail") bucket.failed += 1;
-		else bucket.errors += 1;
+	} else {
+		// Single trial per case — count trials directly
+		for (const trial of trials) {
+			const category = categoryMap.get(trial.caseId);
+			if (category === undefined) continue;
+
+			let bucket = buckets.get(category);
+			if (bucket === undefined) {
+				bucket = { total: 0, passed: 0, failed: 0, errors: 0 };
+				buckets.set(category, bucket);
+			}
+			bucket.total += 1;
+			if (trial.status === "pass") bucket.passed += 1;
+			else if (trial.status === "fail") bucket.failed += 1;
+			else bucket.errors += 1;
+		}
 	}
 
 	const result: Record<string, CategorySummary> = {};
@@ -203,10 +361,6 @@ function computeByCategory(
 	return result;
 }
 
-// TODO(phase2): This hash covers suite structure only — not target identity (model, system prompt,
-// tool schemas, targetVersion). Phase 2 replay uses configHash as the fixture staleness key, so
-// this must be extended before fixtures are meaningful. Changing the hash will invalidate all
-// existing Run artifacts' configHash values; plan the migration accordingly.
 function computeConfigHash(suite: ResolvedSuite): string {
 	const hashInput = JSON.stringify({
 		name: suite.name,

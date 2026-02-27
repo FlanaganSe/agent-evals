@@ -27,6 +27,7 @@ export {
 	TokenUsageSchema,
 	ToolCallSchema,
 	TrialSchema,
+	TrialStatsSchema,
 } from "./config/schema.js";
 export type {
 	Case,
@@ -43,6 +44,7 @@ export type {
 	GraderContext,
 	GraderFactory,
 	GraderFn,
+	RateLimiter,
 	ResolvedSuite,
 	Run,
 	RunMeta,
@@ -55,12 +57,16 @@ export type {
 	TokenUsage,
 	ToolCall,
 	Trial,
+	TrialStats,
 } from "./config/types.js";
 // Plugin
 export type { EvalPlugin } from "./plugin/types.js";
 // Reporters
+export { formatConsoleReport, formatMarkdownSummary } from "./reporters/console.js";
 export { formatJsonReport } from "./reporters/json.js";
+export { createTokenBucketLimiter } from "./runner/rate-limiter.js";
 // Runner
 export { runSuite } from "./runner/runner.js";
+export { computeAllTrialStats, computeTrialStats, wilsonInterval } from "./runner/statistics.js";
 // Storage
 export { listRuns, loadRun, saveRun } from "./storage/run-store.js";

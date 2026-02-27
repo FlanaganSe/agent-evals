@@ -16,6 +16,7 @@ import type {
 	TokenUsageSchema,
 	ToolCallSchema,
 	TrialSchema,
+	TrialStatsSchema,
 } from "./schema.js";
 
 // ─── Inferred from Zod (serializable types) ─────────────────────────────────
@@ -33,6 +34,7 @@ export type GateCheckResult = z.infer<typeof GateCheckResultSchema>;
 export type GateResult = z.infer<typeof GateResultSchema>;
 export type CategorySummary = z.infer<typeof CategorySummarySchema>;
 export type Trial = z.infer<typeof TrialSchema>;
+export type TrialStats = z.infer<typeof TrialStatsSchema>;
 export type RunSummary = z.infer<typeof RunSummarySchema>;
 export type RunMode = z.infer<typeof RunModeSchema>;
 export type Run = z.infer<typeof RunSchema>;
@@ -80,6 +82,7 @@ export interface EvalConfig {
 		| {
 				readonly defaultMode?: RunMode | undefined;
 				readonly timeoutMs?: number | undefined;
+				readonly rateLimit?: number | undefined;
 		  }
 		| undefined;
 }
@@ -96,9 +99,23 @@ export interface ResolvedSuite {
 	readonly tags?: readonly string[] | undefined;
 }
 
+export interface RateLimiter {
+	readonly acquire: (signal?: AbortSignal) => Promise<void>;
+	readonly dispose: () => void;
+}
+
 export interface RunOptions {
 	readonly mode: RunMode;
 	readonly timeoutMs: number;
+	readonly record?: boolean | undefined;
+	readonly concurrency?: number | undefined;
+	readonly signal?: AbortSignal | undefined;
+	readonly previousRunId?: string | undefined;
+	readonly strictFixtures?: boolean | undefined;
+	readonly fixtureDir?: string | undefined;
+	readonly runDir?: string | undefined;
+	readonly trials?: number | undefined;
+	readonly rateLimiter?: RateLimiter | undefined;
 }
 
 export interface RunMeta {

@@ -92,6 +92,20 @@ export const TrialSchema = z.strictObject({
 	grades: z.array(GradeResultSchema).readonly(),
 	score: z.number().min(0).max(1),
 	durationMs: z.number().nonnegative(),
+	trialIndex: z.number().int().nonnegative().optional(),
+});
+
+export const TrialStatsSchema = z.strictObject({
+	trialCount: z.number().int().positive(),
+	passCount: z.number().int().nonnegative(),
+	failCount: z.number().int().nonnegative(),
+	errorCount: z.number().int().nonnegative(),
+	passRate: z.number().min(0).max(1),
+	meanScore: z.number().min(0).max(1),
+	scoreStdDev: z.number().min(0),
+	ci95Low: z.number().min(0).max(1),
+	ci95High: z.number().min(0).max(1),
+	flaky: z.boolean(),
 });
 
 export const GateCheckResultSchema = z.strictObject({
@@ -126,6 +140,8 @@ export const RunSummarySchema = z.strictObject({
 	p95LatencyMs: z.number().nonnegative(),
 	gateResult: GateResultSchema,
 	byCategory: z.record(z.string(), CategorySummarySchema).optional(),
+	aborted: z.boolean().optional(),
+	trialStats: z.record(z.string(), TrialStatsSchema).optional(),
 });
 
 export const RunModeSchema = z.union([
@@ -169,6 +185,7 @@ export const EvalConfigSchema = z.strictObject({
 		.strictObject({
 			defaultMode: RunModeSchema.optional(),
 			timeoutMs: z.number().int().positive().optional(),
+			rateLimit: z.number().int().positive().optional(),
 		})
 		.optional(),
 });

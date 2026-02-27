@@ -13,6 +13,7 @@ export interface ValidatedConfig {
 	readonly run: {
 		readonly defaultMode: RunMode;
 		readonly timeoutMs: number;
+		readonly rateLimit?: number | undefined;
 	};
 }
 
@@ -43,6 +44,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 		run: {
 			defaultMode: config.run?.defaultMode ?? "live",
 			timeoutMs: config.run?.timeoutMs ?? 30_000,
+			rateLimit: config.run?.rateLimit,
 		},
 	};
 }
