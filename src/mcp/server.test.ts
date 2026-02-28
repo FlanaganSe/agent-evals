@@ -80,10 +80,11 @@ describe("MCP server integration helpers", () => {
 		const { listRuns } = await import("../storage/run-store.js");
 
 		const run1 = makeRun("run-1", "smoke", [makeTrial("case-1", "pass")]);
-		const run2 = makeRun("run-2", "smoke", [
-			makeTrial("case-1", "pass"),
-			makeTrial("case-2", "fail"),
-		]);
+		// Give run2 a later timestamp so sort order is deterministic
+		const run2: Run = {
+			...makeRun("run-2", "smoke", [makeTrial("case-1", "pass"), makeTrial("case-2", "fail")]),
+			timestamp: new Date(Date.now() + 1000).toISOString(),
+		};
 
 		await saveRun(run1, tempDir);
 		await saveRun(run2, tempDir);
