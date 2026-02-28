@@ -147,7 +147,7 @@ Best practices from HTTP VCR libraries (Ruby VCR, Python vcrpy, nock):
 - `.gitattributes`: `*.jsonl diff=json` for readable diffs
 - Add `maxFixtureSize` config with warning for large outputs
 - Strip `raw` field from fixtures by default (opt-in via `--record-raw`)
-- Provide `agent-eval cache stats` command for monitoring
+- Provide `agent-evals cache stats` command for monitoring
 
 ### Dependency-Aware Invalidation
 
@@ -354,7 +354,7 @@ Every persisted artifact has `schemaVersion` (semver). Breaking changes to `Run`
 
 ```typescript
 const main = defineCommand({
-  meta: { name: "agent-eval", version: "1.0.0" },
+  meta: { name: "agent-evals", version: "1.0.0" },
   subCommands: {
     run: () => import("./commands/run").then(m => m.default), // lazy-loaded for startup perf
     init: initCommand,   // eager
@@ -383,20 +383,20 @@ Nuxt CLI (Nuxi) depends on citty — sufficient production validation.
 ### CLI Commands
 
 ```bash
-agent-eval run                          # Run all suites (default: replay mode)
-agent-eval run --mode=live              # Run with real LLM calls
-agent-eval run --mode=live --record     # Run live + save fixtures
-agent-eval run --mode=judge-only --run-id=<id>  # Re-grade a previous run
-agent-eval run --suite=smoke            # Run specific suite
-agent-eval run --filter=H01,H02        # Run specific cases
-agent-eval run --filter-failing=<id>   # Re-run only failures from a run
-agent-eval run --trials=5              # Flakiness detection
-agent-eval record                       # Alias: run --mode=live --record
-agent-eval compare <runA> <runB>        # Diff two runs
-agent-eval init                         # Interactive setup wizard
-agent-eval doctor                       # Validate config, check deps
-agent-eval install-hooks                # Auto-detect hook system, install
-agent-eval cache clear                  # Clear fixture cache
+agent-evals run                          # Run all suites (default: replay mode)
+agent-evals run --mode=live              # Run with real LLM calls
+agent-evals run --mode=live --record     # Run live + save fixtures
+agent-evals run --mode=judge-only --run-id=<id>  # Re-grade a previous run
+agent-evals run --suite=smoke            # Run specific suite
+agent-evals run --filter=H01,H02        # Run specific cases
+agent-evals run --filter-failing=<id>   # Re-run only failures from a run
+agent-evals run --trials=5              # Flakiness detection
+agent-evals record                       # Alias: run --mode=live --record
+agent-evals compare <runA> <runB>        # Diff two runs
+agent-evals init                         # Interactive setup wizard
+agent-evals doctor                       # Validate config, check deps
+agent-evals install-hooks                # Auto-detect hook system, install
+agent-evals cache clear                  # Clear fixture cache
 ```
 
 ### Exit Codes
@@ -531,7 +531,7 @@ interface EvalPlugin {
 ### Custom Grader Pattern
 
 ```typescript
-import type { GraderFn } from 'agent-eval/plugin'
+import type { GraderFn } from 'agent-evals/plugin'
 
 export const noInvestmentAdvice: GraderFn = async (output) => {
   const prohibited = ['you should buy', 'I recommend investing', 'guaranteed returns']
@@ -559,9 +559,9 @@ export const noInvestmentAdvice: GraderFn = async (output) => {
 
 | Stage | Trigger | What Runs | Cost | Time |
 |-------|---------|-----------|------|------|
-| **Pre-push** | `git push` | `agent-eval run --mode=replay --suite=smoke` | $0 | <5s |
-| **PR CI** | Pull request | `agent-eval run --mode=replay --reporter=junit` | $0 | <30s |
-| **Nightly** | Cron | `agent-eval run --mode=live --reporter=json` | $$ | minutes |
+| **Pre-push** | `git push` | `agent-evals run --mode=replay --suite=smoke` | $0 | <5s |
+| **PR CI** | Pull request | `agent-evals run --mode=replay --reporter=junit` | $0 | <30s |
+| **Nightly** | Cron | `agent-evals run --mode=live --reporter=json` | $$ | minutes |
 | **Release** | Tag | Full live + comparison vs. last release | $$$ | minutes |
 
 **Pre-commit intentionally excluded**: Eval replay adds 1-3s, too slow for pre-commit (<500ms target). Pre-commit should only run linting/formatting.
@@ -587,7 +587,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm agent-eval run --mode=replay --reporter=junit --output=results.xml
+      - run: pnpm agent-evals run --mode=replay --reporter=junit --output=results.xml
       - uses: mikepenz/action-junit-report@v4
         if: always()
         with: { report_paths: results.xml }
@@ -686,9 +686,9 @@ tsdown is the tsup successor (same author ecosystem, Rolldown/Rust-based). Key d
 ### v1: npm Only
 
 ```bash
-npx agent-eval init          # Zero-install first use
-npm install -g agent-eval    # Global
-npm install --save-dev agent-eval  # Project dependency
+npx agent-evals init          # Zero-install first use
+npm install -g agent-evals    # Global
+npm install --save-dev agent-evals  # Project dependency
 ```
 
 ### Package Format
@@ -711,7 +711,7 @@ The implementation plan correctly chose single package with subpath exports:
 }
 ```
 
-Extract packages later when real consumers need `@agent-eval/core` without CLI. Zero users means zero signal about where boundaries should be.
+Extract packages later when real consumers need `@agent-evals/core` without CLI. Zero users means zero signal about where boundaries should be.
 
 ### Homebrew: Deferred
 
@@ -769,10 +769,10 @@ Design APIs so MCP wrapping is trivial later. The eval framework as MCP server w
 ### Secondary (Directional Signal)
 
 - [Braintrust: Best AI Evals Tools for CI/CD 2025](https://www.braintrust.dev/articles/best-ai-evals-tools-cicd-2025)
-- [Braintrust: Top 5 Platforms for Agent Evals](https://www.braintrust.dev/articles/top-5-platforms-agent-evals-2025)
+- [Braintrust: Top 5 Platforms for Agent Evals](https://www.braintrust.dev/articles/top-5-platforms-agent-evalss-2025)
 - [Arize: Comparing LLM Evaluation Platforms](https://arize.com/llm-evaluation-platforms-top-frameworks/)
 - [Arize: LLM-as-a-Judge](https://arize.com/llm-as-a-judge/)
-- [Galileo: Four New Agent Evaluation Metrics](https://galileo.ai/blog/four-new-agent-evaluation-metrics)
+- [Galileo: Four New Agent Evaluation Metrics](https://galileo.ai/blog/four-new-agent-evalsuation-metrics)
 - [OpenTelemetry GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 
 ### Research Papers

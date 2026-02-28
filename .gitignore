@@ -11,3 +11,5 @@ coverage/
 # Claude
 .claude/plans/
 .claude/worktrees/
+plans/*
+.claude/research/
