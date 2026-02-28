@@ -14,6 +14,8 @@ const main = defineCommand({
 		list: () => import("./commands/list.js").then((m) => m.default),
 		cache: () => import("./commands/cache.js").then((m) => m.default),
 		doctor: () => import("./commands/doctor.js").then((m) => m.default),
+		init: () => import("./commands/init.js").then((m) => m.default),
+		"install-hooks": () => import("./commands/install-hooks.js").then((m) => m.default),
 	},
 });
 

@@ -1,9 +1,10 @@
 import { access, readdir, stat } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { defineCommand } from "citty";
 import pc from "picocolors";
 import { loadConfig } from "../../config/loader.js";
 import { globalArgs } from "../shared-args.js";
+import { detectHookManager } from "./hook-detection.js";
 
 export interface CheckResult {
 	readonly status: "pass" | "warn" | "fail";
@@ -84,6 +85,36 @@ export async function checkFixtureDir(): Promise<CheckResult> {
 	}
 }
 
+export async function checkGitHooks(cwd?: string): Promise<CheckResult> {
+	const dir = cwd ?? ".";
+	const detected = await detectHookManager(dir);
+	if (detected) {
+		return {
+			status: "pass",
+			message: `Git hooks: ${detected.manager} (${detected.reason})`,
+		};
+	}
+	return {
+		status: "warn",
+		message:
+			"No git hook manager detected. Run 'agent-evals install-hooks' to set up pre-push eval checks.",
+	};
+}
+
+export async function checkAgentsMd(cwd?: string): Promise<CheckResult> {
+	const dir = cwd ?? ".";
+	try {
+		await access(join(dir, "AGENTS.md"));
+		return { status: "pass", message: "AGENTS.md found" };
+	} catch {
+		return {
+			status: "warn",
+			message:
+				"No AGENTS.md found. Run 'agent-evals init' to generate one for AI coding assistants.",
+		};
+	}
+}
+
 // ─── Command ────────────────────────────────────────────────────────────────
 
 // biome-ignore lint/style/noDefaultExport: citty subcommands require default exports
@@ -100,6 +131,8 @@ export default defineCommand({
 			await checkDuplicateSuiteNames(cwd),
 			await checkRunStorage(),
 			await checkFixtureDir(),
+			await checkGitHooks(cwd),
+			await checkAgentsMd(cwd),
 		];
 
 		const lines = ["agent-evals doctor", ""];
