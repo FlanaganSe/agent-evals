@@ -3,226 +3,274 @@ title: Graders API
 description: Reference for all built-in graders
 ---
 
-## Deterministic Graders
+agent-evals ships 20 built-in graders across three tiers: **deterministic** (pure functions — fast, free, reproducible), **LLM** (require a judge configuration), and **composition** (combine other graders with boolean logic).
 
-These graders are pure functions — fast, free, and reproducible.
-
-### `exact-match`
-
-Checks if output text exactly matches expected text.
-
-```yaml
-graders:
-  - name: exact-match
-```
+## Text Graders
 
 ### `contains`
 
-Checks if output contains a substring.
+Checks if output text contains a substring. Case-insensitive by default.
 
-```yaml
-graders:
-  - name: contains
-    options:
-      substring: "expected text"
-      caseSensitive: false  # default: false
+```typescript
+contains("Paris")
+contains("Paris", { caseSensitive: true })
 ```
 
-### `contains-all`
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `caseSensitive` | boolean | `false` | Enable case-sensitive matching |
 
-Checks if output contains all specified substrings.
+### `notContains`
 
-```yaml
-graders:
-  - name: contains-all
-    options:
-      substrings: ["keyword1", "keyword2"]
+Checks that output text does NOT contain a substring. Case-insensitive by default.
+
+```typescript
+notContains("sorry")
+notContains("ERROR", { caseSensitive: true })
 ```
 
-### `contains-any`
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `caseSensitive` | boolean | `false` | Enable case-sensitive matching |
 
-Checks if output contains at least one of the specified substrings.
+### `exactMatch`
 
-```yaml
-graders:
-  - name: contains-any
-    options:
-      substrings: ["option1", "option2"]
+Checks that output text exactly equals the expected string. Trims whitespace by default.
+
+```typescript
+exactMatch("42")
+exactMatch("Hello World", { trim: false, caseSensitive: false })
 ```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `trim` | boolean | `true` | Trim whitespace before comparing |
+| `caseSensitive` | boolean | `true` | Enable case-sensitive comparison |
 
 ### `regex`
 
-Tests output against a regular expression.
+Tests output against a regular expression. Accepts a string or RegExp.
 
-```yaml
-graders:
-  - name: regex
-    options:
-      pattern: "\\d{3}-\\d{4}"
-      flags: "i"
+```typescript
+regex(/\d{3}-\d{4}/)
+regex("\\d+\\.\\d{2}", { flags: "i" })
 ```
 
-### `starts-with`
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `flags` | string | — | Regex flags (only for string patterns) |
 
-Checks if output starts with a prefix.
+### `jsonSchema`
 
-```yaml
-graders:
-  - name: starts-with
-    options:
-      prefix: "Hello"
+Parses output text as JSON and validates against a Zod schema. Fails if text is not valid JSON or does not match the schema.
+
+```typescript
+import { z } from "zod";
+
+jsonSchema(z.object({ name: z.string(), age: z.number() }))
 ```
 
-### `ends-with`
+## Tool Call Graders
 
-Checks if output ends with a suffix.
+### `toolCalled`
 
-```yaml
-graders:
-  - name: ends-with
-    options:
-      suffix: "Thank you."
+Checks that a specific tool was invoked in the output tool calls.
+
+```typescript
+toolCalled("search")
 ```
 
-### `length`
+### `toolNotCalled`
 
-Validates output length is within bounds.
+Checks that a specific tool was NOT invoked.
 
-```yaml
-graders:
-  - name: length
-    options:
-      min: 10
-      max: 500
+```typescript
+toolNotCalled("deleteAll")
 ```
 
-### `json-schema`
+### `toolSequence`
 
-Validates that output is valid JSON matching a schema.
+Checks that tool calls match an expected sequence. Four modes available.
 
-```yaml
-graders:
-  - name: json-schema
-    options:
-      schema:
-        type: object
-        required: ["name", "age"]
+```typescript
+toolSequence(["search", "summarize"])                  // unordered (default)
+toolSequence(["search", "summarize"], "strict")        // exact order
+toolSequence(["search"], "subset")                     // expected tools appear in actual
+toolSequence(["search", "summarize", "save"], "superset") // actual tools appear in expected
 ```
 
-### `json-valid`
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `mode` | string | `"unordered"` | Match mode: `strict`, `unordered`, `subset`, `superset` |
 
-Checks if output is valid JSON.
+### `toolArgsMatch`
 
-```yaml
-graders:
-  - name: json-valid
+Checks that a tool call's arguments match expected values.
+
+```typescript
+toolArgsMatch("search", { query: "weather" })                    // subset (default)
+toolArgsMatch("search", { query: "weather" }, "exact")           // deep equality
+toolArgsMatch("search", { query: "weather" }, "contains")        // strings use .includes()
 ```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `mode` | string | `"subset"` | Match mode: `exact`, `subset`, `contains` |
+
+## Metric Graders
 
 ### `latency`
 
-Checks if response latency is within threshold.
+Checks that response latency (`output.latencyMs`) is within the allowed threshold.
 
-```yaml
-graders:
-  - name: latency
-    options:
-      maxMs: 5000
+```typescript
+latency(5000)
 ```
 
 ### `cost`
 
-Checks if response cost is within budget.
+Checks that response cost (`output.cost`) is within budget. Skips if cost is not reported.
 
-```yaml
-graders:
-  - name: cost
-    options:
-      maxCost: 0.05  # USD
+```typescript
+cost(0.05)
 ```
 
-### `tool-called`
+### `tokenCount`
 
-Checks if specific tools were called.
+Checks that total token usage (input + output) is within the allowed limit. Skips if token usage is not reported.
 
-```yaml
-graders:
-  - name: tool-called
-    options:
-      toolName: "search"
+```typescript
+tokenCount(4096)
 ```
 
-### `tool-count`
+## Safety Graders
 
-Validates the number of tool calls.
+### `safetyKeywords`
 
-```yaml
-graders:
-  - name: tool-count
-    options:
-      min: 1
-      max: 3
+Checks that output text does NOT contain any prohibited keywords. Case-insensitive matching.
+
+```typescript
+safetyKeywords(["guaranteed returns", "buy now", "act fast"])
 ```
 
-### `levenshtein`
+### `noHallucinatedNumbers`
 
-Scores based on edit distance between output and expected text.
+Checks that numbers in output text are grounded in tool call results. Catches fabricated numbers — the most dangerous agent failure mode.
 
-```yaml
-graders:
-  - name: levenshtein
-    options:
-      maxDistance: 10
+```typescript
+noHallucinatedNumbers()
+noHallucinatedNumbers({ tolerance: 0.01, skipSmallIntegers: false })
 ```
 
-### `numeric-closeness`
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `tolerance` | number | `0.005` | Relative tolerance for matching (0.005 = 0.5%) |
+| `skipSmallIntegers` | boolean | `true` | Skip integers with absolute value < 10 |
 
-Scores based on how close a numeric output is to an expected value.
-
-```yaml
-graders:
-  - name: numeric-closeness
-    options:
-      tolerance: 0.1
-```
+Always skips year-like numbers (1900–2100). Score is proportional: `(checked - hallucinated) / checked`.
 
 ## LLM Graders
 
-These require a `judge` configuration in your eval config.
+These require a `judge` configuration in your eval config. See [Configuration](/reference/config/) for setup.
 
-### `llm-rubric`
+### `llmRubric`
 
-Scores output against a rubric using an LLM judge.
+Scores agent output against natural language criteria using an LLM judge. Judge scores 1–4 (poor to excellent).
 
-```yaml
-graders:
-  - name: llm-rubric
-    options:
-      rubric: |
-        Score the response on helpfulness (1-5):
-        5: Comprehensive, actionable answer
-        1: Unhelpful or irrelevant
-      passThreshold: 3
+```typescript
+llmRubric("Response is helpful, accurate, and well-formatted")
+llmRubric("Answer is concise", {
+  passThreshold: 0.75,
+  examples: [
+    { output: "Yes.", score: 4, reasoning: "Direct and concise" },
+    { output: "Well, I think maybe...", score: 1, reasoning: "Rambling" },
+  ],
+})
 ```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `passThreshold` | number | `0.75` | Score threshold for passing (0–1) |
+| `examples` | array | — | Few-shot calibration examples (output, score 1–4, reasoning) |
+
+Default pass threshold of 0.75 maps to a judge score of 3 or higher.
 
 ### `factuality`
 
-Checks if the output is factually consistent with expected content.
+Specialized LLM judge that evaluates factual consistency against a reference. Requires `expected.text` as the ground truth.
 
-```yaml
-graders:
-  - name: factuality
+```typescript
+factuality()
+factuality({ passThreshold: 0.9 })
 ```
 
-## Composing Graders
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `passThreshold` | number | `0.75` | Score threshold for passing (0–1) |
 
-Apply multiple graders with weights:
+Evaluates accuracy, completeness, and absence of fabrication.
+
+### `llmClassify`
+
+Classifies agent output into one of N categories using an LLM judge. Passes when classification matches `expected.metadata.classification`.
+
+```typescript
+llmClassify({
+  helpful: "Answers the question directly",
+  unhelpful: "Does not answer the question",
+})
+llmClassify(
+  { positive: "Positive sentiment", negative: "Negative sentiment" },
+  { criteria: "Classify based on overall tone" },
+)
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `criteria` | string | — | Additional classification instructions |
+
+If no expected classification is set on the case, runs in classification-only mode (always passes).
+
+## Composition Operators
+
+Combine graders with boolean logic. These operators do not short-circuit — they collect all results for complete reporting.
+
+### `all`
+
+Conjunction: all graders must pass. Score is the minimum of all scores.
+
+```typescript
+all([contains("Paris"), toolCalled("search"), latency(5000)])
+```
+
+Empty list returns pass (vacuous truth).
+
+### `any`
+
+Disjunction: at least one grader must pass. Score is the maximum of all scores.
+
+```typescript
+any([contains("capital of France"), contains("Paris")])
+```
+
+Empty list returns fail.
+
+### `not`
+
+Negation: inverts a grader's result. Score becomes `1 - original`.
+
+```typescript
+not(contains("I don't know"))
+```
+
+## Weighted Scoring
+
+Apply multiple graders per case with weights. The final score is a weighted average. A case passes if the weighted score meets the pass threshold (default: 0.5).
 
 ```typescript
 graders: [
-  { name: "contains", options: { substring: "hello" }, weight: 0.3 },
-  { name: "latency", options: { maxMs: 5000 }, weight: 0.2 },
-  { name: "llm-rubric", options: { rubric: "..." }, weight: 0.5 },
+  { grader: contains("hello"), weight: 0.3 },
+  { grader: latency(5000), weight: 0.2 },
+  { grader: llmRubric("Helpful response"), weight: 0.5 },
 ]
 ```
-
-The final score is a weighted average. A case passes if the weighted score meets the pass threshold (default: 0.5).

@@ -5,7 +5,7 @@ description: AI assistant integration via Model Context Protocol
 
 ## Overview
 
-agent-evals includes an MCP (Model Context Protocol) server that lets AI coding assistants run evals, inspect results, and compare runs without leaving the editor.
+agent-evals includes an MCP (Model Context Protocol) server that lets AI coding assistants discover suites, run evals, inspect results, compare runs, and understand the full config — all without leaving the editor.
 
 ## Setup
 
@@ -33,44 +33,117 @@ Add to your assistant's MCP configuration (e.g., `.claude/settings.json` for Cla
 
 ### 3. Start using
 
-The MCP server exposes 4 tools:
+The MCP server exposes 8 tools and 3 resources.
+
+## Recommended workflow
+
+1. **`list-suites`** — Discover available suite names
+2. **`list-graders`** — Understand which graders are available
+3. **`describe-config`** — Inspect the full config structure
+4. **`run-suite`** — Execute an eval suite
+5. **`list-runs`** — Find run IDs
+6. **`get-run-details`** — Inspect a specific run
+7. **`compare-runs`** — Diff two runs
+
+Use **`validate-config`** after modifying `eval.config.ts` to catch errors before running.
 
 ## Tools
 
-### `run-suite`
+### Discovery tools
 
-Execute an eval suite and get results.
+#### `list-suites`
+
+List all eval suites defined in the project's `eval.config.ts` with case counts, categories, and gates.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `suite` | string | (required) | Suite name to run |
+| `verbose` | boolean | `false` | Include full case IDs in output |
+
+#### `describe-config`
+
+Return the fully loaded eval config as structured JSON, including suites, cases, gates, and run settings.
+
+No parameters. Loads and evaluates `eval.config.ts`. Functions (target, judge, graders) are shown as metadata counts, not serialized.
+
+#### `list-graders`
+
+Enumerate all available graders with their parameters, defaults, and usage examples.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `tier` | string | (all) | Filter: `deterministic`, `llm`, or `composition` |
+| `category` | string | (all) | Filter: `text`, `tool-call`, `metric`, `safety`, `llm-judge`, `composition` |
+| `includePlugins` | boolean | `true` | Include plugin graders (loads config) |
+
+#### `validate-config`
+
+Validate that `eval.config.ts` loads without errors and check for common issues.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `configPath` | string | `eval.config` | Custom config file path |
+
+### Execution tools
+
+#### `run-suite`
+
+Execute an eval suite by name and return pass/fail results with per-case grades.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `suite` | string | (required) | Suite name (use `list-suites` to discover) |
 | `mode` | `live\|replay` | `replay` | Execution mode |
 | `record` | boolean | `false` | Record fixtures in live mode |
 
-### `list-runs`
+#### `list-runs`
 
-List recent eval runs with IDs, timestamps, and pass rates.
+List recent eval runs with IDs, suite names, modes, pass rates, and timestamps.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `limit` | number | `10` | Maximum runs to return |
 
-### `compare-runs`
+#### `compare-runs`
 
-Compare two runs and show regressions, improvements, and score deltas.
+Compare two runs and show regressions, improvements, and score deltas per case.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `baseRunId` | string | Base run ID (older) |
 | `compareRunId` | string | Compare run ID (newer) |
 
-### `get-run-details`
+#### `get-run-details`
 
-Get detailed results for a specific run including per-case grades.
+Get detailed results for a specific run including per-case grades, scores, and failure reasons.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `runId` | string | Run ID to inspect |
+
+## Resources
+
+Resources are read-only reference data that agents can cache. Access them via MCP resource reads.
+
+| URI | Type | Description |
+|-----|------|-------------|
+| `eval://schema/config` | JSON Schema | Schema for the serializable portion of `eval.config.ts` |
+| `eval://schema/case` | JSON Schema | Schema for individual eval cases (JSONL lines) |
+| `eval://reference/graders` | Markdown | Complete grader reference with parameters and examples |
+
+## Tool annotations
+
+All tools include MCP annotations for agent safety reasoning:
+
+| Tool | readOnly | destructive | idempotent |
+|------|----------|-------------|------------|
+| `list-suites` | yes | no | yes |
+| `describe-config` | yes | no | yes |
+| `list-graders` | yes | no | yes |
+| `validate-config` | yes | no | yes |
+| `run-suite` | no | no | no |
+| `list-runs` | yes | no | yes |
+| `compare-runs` | yes | no | yes |
+| `get-run-details` | yes | no | yes |
 
 ## Stdio safety
 

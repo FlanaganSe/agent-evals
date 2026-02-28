@@ -45,15 +45,18 @@ agent-evals run --mode=judge-only --run-id=<previous-run-id> --suite=smoke
 
 ## Graders
 
-Graders are pure functions that score outputs. agent-evals ships 18 built-in graders in two categories:
+Graders are functions that score outputs. agent-evals ships 20 built-in graders in three tiers:
 
 ### Deterministic graders
-Fast, free, reproducible. Examples: `exact-match`, `contains`, `regex`, `json-schema`, `latency`, `cost`.
+Fast, free, reproducible. Pure functions with no I/O. Examples: `contains`, `exactMatch`, `regex`, `jsonSchema`, `toolCalled`, `toolSequence`, `latency`, `cost`, `safetyKeywords`, `noHallucinatedNumbers`.
 
 ### LLM graders
-Use an LLM to judge quality. Examples: `llm-rubric`, `factuality`, `llm-classify`. These require a judge configuration.
+Use an LLM to judge quality. Examples: `llmRubric`, `factuality`, `llmClassify`. These require a judge configuration.
 
-Graders can be composed: apply multiple graders per case, weight their scores, and set pass thresholds.
+### Composition operators
+Combine graders with boolean logic: `all` (conjunction), `any` (disjunction), `not` (negation). These do not short-circuit — they collect all results for complete reporting.
+
+Graders can also be composed with weighted scoring: apply multiple graders per case, weight their scores, and set pass thresholds.
 
 ## Gates
 
