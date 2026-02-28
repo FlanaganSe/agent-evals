@@ -82,7 +82,12 @@ export type {
 } from "./config/types.js";
 // Fixtures
 export { computeFixtureConfigHash } from "./fixtures/config-hash.js";
-export type { FixtureReadResult, FixtureStatsResult } from "./fixtures/fixture-store.js";
+export type {
+	FixtureInfo,
+	FixtureReadResult,
+	FixtureStatsResult,
+	FixtureStoreOptions,
+} from "./fixtures/fixture-store.js";
 export {
 	clearFixtures,
 	fixtureStats,
