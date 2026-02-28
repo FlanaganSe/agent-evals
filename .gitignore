@@ -4,6 +4,7 @@ coverage/
 .eval-fixtures/
 .eval-runs/
 
+.astro/
 .env
 .DS_Store
 
