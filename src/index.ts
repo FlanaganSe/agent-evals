@@ -61,6 +61,8 @@ export type {
 	JudgeMessage,
 	JudgeResponse,
 	RateLimiter,
+	ReporterConfig,
+	ReporterConfigWithOptions,
 	ResolvedSuite,
 	Run,
 	RunMeta,
@@ -77,14 +79,26 @@ export type {
 } from "./config/types.js";
 // LLM Graders
 export { factuality } from "./graders/llm/factuality.js";
+export { createCachingJudge } from "./graders/llm/judge-cache.js";
+export { type LlmClassifyOptions, llmClassify } from "./graders/llm/llm-classify.js";
 export { llmRubric } from "./graders/llm/llm-rubric.js";
 // Plugin
-export type { EvalPlugin } from "./plugin/types.js";
+export type {
+	AfterTrialContext,
+	BeforeRunContext,
+	EvalPlugin,
+	PluginHooks,
+} from "./plugin/types.js";
 // Reporters
 export { formatConsoleReport, formatMarkdownSummary } from "./reporters/console.js";
 export { formatJsonReport } from "./reporters/json.js";
-export { createTokenBucketLimiter } from "./runner/rate-limiter.js";
+export { formatJunitXml } from "./reporters/junit.js";
+export { formatMarkdownReport } from "./reporters/markdown.js";
+export { resolveReporter } from "./reporters/registry.js";
+export type { ReporterOptions, ReporterPlugin } from "./reporters/types.js";
 // Runner
+export { type CostEstimate, estimateCost } from "./runner/cost-estimator.js";
+export { createTokenBucketLimiter } from "./runner/rate-limiter.js";
 export { runSuite } from "./runner/runner.js";
 export { computeAllTrialStats, computeTrialStats, wilsonInterval } from "./runner/statistics.js";
 // Storage

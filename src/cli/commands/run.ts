@@ -1,9 +1,20 @@
 import { appendFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { defineCommand } from "citty";
 import { loadConfig, type ValidatedConfig } from "../../config/loader.js";
-import type { JudgeCallFn, ResolvedSuite, Run, RunOptions } from "../../config/types.js";
-import { formatConsoleReport, formatMarkdownSummary } from "../../reporters/console.js";
+import type {
+	JudgeCallFn,
+	ReporterConfig,
+	ReporterConfigWithOptions,
+	ResolvedSuite,
+	Run,
+	RunOptions,
+} from "../../config/types.js";
+import { formatMarkdownReport } from "../../reporters/markdown.js";
+import { resolveReporter } from "../../reporters/registry.js";
+import type { ReporterPlugin } from "../../reporters/types.js";
+import { estimateCost } from "../../runner/cost-estimator.js";
 import type { RateLimiter } from "../../runner/rate-limiter.js";
 import { createTokenBucketLimiter } from "../../runner/rate-limiter.js";
 import { runSuite } from "../../runner/runner.js";
@@ -45,6 +56,7 @@ export function buildRunOptions(
 	rateLimiter?: RateLimiter,
 	judge?: JudgeCallFn,
 	previousRun?: Run,
+	plugins?: ValidatedConfig["plugins"],
 ): RunOptions {
 	const mode = (args.mode ?? configDefaults.defaultMode ?? "replay") as RunOptions["mode"];
 	return {
@@ -59,6 +71,7 @@ export function buildRunOptions(
 		trials: parseIntArg(args.trials, "trials"),
 		rateLimiter,
 		judge,
+		plugins: plugins && plugins.length > 0 ? plugins : undefined,
 	};
 }
 
@@ -88,6 +101,10 @@ export interface ExecuteRunArgs {
 	readonly "strict-fixtures"?: boolean | undefined;
 	readonly "rate-limit"?: string | undefined;
 	readonly "no-color"?: boolean | undefined;
+	readonly reporter?: string | undefined;
+	readonly output?: string | undefined;
+	readonly "confirm-cost"?: boolean | undefined;
+	readonly "auto-approve"?: boolean | undefined;
 }
 
 export async function executeRun(args: ExecuteRunArgs): Promise<void> {
@@ -151,6 +168,31 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 			previousRun = await loadRun(args["run-id"]);
 		}
 
+		// Cost confirmation
+		if (args["confirm-cost"]) {
+			for (const suite of suites) {
+				const estimate = estimateCost(suite, {
+					mode: (args.mode ?? validatedConfig.run.defaultMode) as RunOptions["mode"],
+					trials: parseIntArg(args.trials, "trials"),
+				});
+				if (estimate.judgeCalls > 0 || estimate.targetCalls > 0) {
+					logger.info(`\nCost estimate for '${suite.name}':\n${estimate.summary}\n`);
+				}
+			}
+
+			if (process.stdout.isTTY && !args["auto-approve"]) {
+				const shouldContinue = await confirmPrompt("Proceed with this run?");
+				if (!shouldContinue) {
+					logger.info("Run cancelled.");
+					process.exit(0);
+				}
+			} else if (!args["auto-approve"]) {
+				logger.warn(
+					"Non-interactive environment detected. Use --auto-approve to skip confirmation.",
+				);
+			}
+		}
+
 		for (const rawSuite of suites) {
 			let suite = rawSuite;
 
@@ -190,12 +232,12 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 				rateLimiter,
 				validatedConfig.judge?.call,
 				previousRun,
+				validatedConfig.plugins,
 			);
 			const run = await runSuite(suite, options);
 
-			// Output console report to stdout
-			const report = formatConsoleReport(run, { color: !args["no-color"] });
-			process.stdout.write(`${report}\n`);
+			// Dispatch reporters
+			await dispatchReporters(run, args, validatedConfig.reporters);
 
 			// Write GitHub Actions summary
 			await writeGitHubSummary(run);
@@ -235,10 +277,75 @@ async function loadConfigSafe(configPath: string | undefined): Promise<Validated
 	}
 }
 
+async function dispatchReporters(
+	run: Run,
+	args: {
+		readonly reporter?: string | undefined;
+		readonly output?: string | undefined;
+		readonly verbose?: boolean | undefined;
+		readonly quiet?: boolean | undefined;
+		readonly "no-color"?: boolean | undefined;
+	},
+	configReporters: readonly ReporterConfig[],
+): Promise<void> {
+	// Primary reporter: --reporter flag replaces console (not adds to it)
+	const primaryReporterName = args.reporter ?? "console";
+	if (!args.quiet) {
+		const plugin = await resolveReporter(primaryReporterName);
+		const result = await plugin.report(run, {
+			output: args.output,
+			verbose: args.verbose,
+			color: primaryReporterName === "console" ? !args["no-color"] : undefined,
+		});
+		if (result && !args.output) {
+			process.stdout.write(`${result}\n`);
+		}
+	}
+
+	// Config-level reporters (additional output targets)
+	for (const reporterConfig of configReporters) {
+		const { reporter, output, options } = normalizeReporterConfig(reporterConfig);
+		const plugin = await resolveReporter(reporter);
+		const result = await plugin.report(run, { output, ...options });
+		if (result && !output) {
+			process.stdout.write(`${result}\n`);
+		}
+	}
+}
+
+function normalizeReporterConfig(config: ReporterConfig): {
+	readonly reporter: string | ReporterPlugin;
+	readonly output?: string | undefined;
+	readonly options?: Record<string, unknown> | undefined;
+} {
+	if (typeof config === "string") {
+		return { reporter: config };
+	}
+	if ("report" in config && typeof config.report === "function") {
+		return { reporter: config as ReporterPlugin };
+	}
+	const withOptions = config as ReporterConfigWithOptions;
+	return {
+		reporter: withOptions.reporter,
+		output: withOptions.output,
+		options: withOptions.options as Record<string, unknown> | undefined,
+	};
+}
+
+async function confirmPrompt(message: string): Promise<boolean> {
+	const rl = createInterface({ input: process.stdin, output: process.stdout });
+	return new Promise((resolve) => {
+		rl.question(`${message} (y/N) `, (answer) => {
+			rl.close();
+			resolve(answer.toLowerCase() === "y");
+		});
+	});
+}
+
 async function writeGitHubSummary(run: Run): Promise<void> {
 	const summaryPath = process.env.GITHUB_STEP_SUMMARY;
 	if (!summaryPath) return;
-	const markdown = formatMarkdownSummary(run);
+	const markdown = formatMarkdownReport(run);
 	await appendFile(summaryPath, `${markdown}\n`);
 }
 
@@ -296,6 +403,26 @@ export default defineCommand({
 		"rate-limit": {
 			type: "string" as const,
 			description: "Max requests per minute for live mode",
+		},
+		reporter: {
+			type: "string" as const,
+			alias: "r",
+			description: "Reporter format: console, json, junit, markdown (default: console)",
+		},
+		output: {
+			type: "string" as const,
+			alias: "o",
+			description: "Output file path for reporter (default: stdout)",
+		},
+		"confirm-cost": {
+			type: "boolean" as const,
+			description: "Show cost estimate and confirm before running",
+			default: false,
+		},
+		"auto-approve": {
+			type: "boolean" as const,
+			description: "Skip cost confirmation in non-interactive environments",
+			default: false,
 		},
 	},
 	async run({ args }) {

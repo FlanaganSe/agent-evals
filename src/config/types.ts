@@ -155,6 +155,23 @@ export interface EvalConfig {
 		  }
 		| undefined;
 	readonly judge?: JudgeConfig | undefined;
+	readonly plugins?: readonly import("../plugin/types.js").EvalPlugin[] | undefined;
+	readonly reporters?: readonly ReporterConfig[] | undefined;
+}
+
+/**
+ * Reporter config entry in EvalConfig.
+ * Can be a string name (for built-in reporters) or a ReporterPlugin object.
+ */
+export type ReporterConfig =
+	| string
+	| import("../reporters/types.js").ReporterPlugin
+	| ReporterConfigWithOptions;
+
+export interface ReporterConfigWithOptions {
+	readonly reporter: string | import("../reporters/types.js").ReporterPlugin;
+	readonly output?: string | undefined;
+	readonly options?: Readonly<Record<string, unknown>> | undefined;
 }
 
 /** A suite with cases fully resolved (loaded from files if needed). */
@@ -188,6 +205,7 @@ export interface RunOptions {
 	readonly trials?: number | undefined;
 	readonly rateLimiter?: RateLimiter | undefined;
 	readonly judge?: JudgeCallFn | undefined;
+	readonly plugins?: readonly import("../plugin/types.js").EvalPlugin[] | undefined;
 }
 
 export interface RunMeta {

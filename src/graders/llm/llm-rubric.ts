@@ -50,7 +50,7 @@ export function llmRubric(optionsOrCriteria: LlmRubricOptions | string): GraderF
 
 	const graderName = "llm-rubric";
 
-	return async (
+	const graderFn = async (
 		output: TargetOutput,
 		expected: CaseExpected | undefined,
 		context: GraderContext,
@@ -124,4 +124,6 @@ export function llmRubric(optionsOrCriteria: LlmRubricOptions | string): GraderF
 			},
 		};
 	};
+
+	return Object.assign(graderFn, { requiresJudge: true as const });
 }

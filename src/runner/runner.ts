@@ -11,6 +11,7 @@ import type {
 	Trial,
 } from "../config/types.js";
 import { VERSION } from "../index.js";
+import { createHookDispatcher } from "../plugin/hooks.js";
 import { evaluateGates } from "./gate.js";
 import { runJudgeOnly } from "./judge-only.js";
 import { runGraderPipeline } from "./pipeline.js";
@@ -35,12 +36,22 @@ export async function runSuite(suite: ResolvedSuite, options: RunOptions): Promi
 		return runSuiteJudgeOnly(suite, options);
 	}
 
+	const dispatcher = createHookDispatcher(options.plugins ?? []);
 	const runId = randomUUID();
 	const startTime = Date.now();
 	const trialCount = options.trials ?? 1;
+	const totalTrialCount = suite.cases.length * trialCount;
+
+	await dispatcher.beforeRun({
+		suiteId: suite.name,
+		mode: options.mode,
+		caseCount: suite.cases.length,
+		trialCount: totalTrialCount,
+	});
 
 	const workItems = expandTrials(suite.cases, trialCount);
 	let aborted = false;
+	let completedCount = 0;
 
 	const trials: Trial[] = await concurrentMap(
 		workItems,
@@ -54,7 +65,14 @@ export async function runSuite(suite: ResolvedSuite, options: RunOptions): Promi
 				await options.rateLimiter.acquire(options.signal);
 			}
 
-			return executeCase(item.testCase, suite, options, item.trialIndex);
+			const trial = await executeCase(item.testCase, suite, options, item.trialIndex);
+			completedCount++;
+			await dispatcher.afterTrial(trial, {
+				suiteId: suite.name,
+				completedCount,
+				totalCount: totalTrialCount,
+			});
+			return trial;
 		},
 		options.concurrency ?? 1,
 		options.signal,
@@ -88,7 +106,7 @@ export async function runSuite(suite: ResolvedSuite, options: RunOptions): Promi
 		gateResult,
 	};
 
-	return {
+	const run: Run = {
 		schemaVersion: SCHEMA_VERSION,
 		id: runId,
 		suiteId: suite.name,
@@ -99,6 +117,10 @@ export async function runSuite(suite: ResolvedSuite, options: RunOptions): Promi
 		configHash: computeConfigHash(suite),
 		frameworkVersion: VERSION,
 	};
+
+	await dispatcher.afterRun(run);
+
+	return run;
 }
 
 async function runSuiteJudgeOnly(suite: ResolvedSuite, options: RunOptions): Promise<Run> {

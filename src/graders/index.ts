@@ -19,6 +19,8 @@ export { toolCalled, toolNotCalled } from "./deterministic/tool-called.js";
 export { toolSequence } from "./deterministic/tool-sequence.js";
 // LLM graders
 export { type FactualityOptions, factuality } from "./llm/factuality.js";
+export { createCachingJudge, type JudgeCacheOptions } from "./llm/judge-cache.js";
+export { type LlmClassifyOptions, llmClassify } from "./llm/llm-classify.js";
 export { type LlmRubricExample, type LlmRubricOptions, llmRubric } from "./llm/llm-rubric.js";
 
 // Scoring

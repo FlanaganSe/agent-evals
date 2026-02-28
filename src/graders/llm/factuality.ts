@@ -1,4 +1,12 @@
-import type { GraderFn, JudgeCallFn, JudgeCallOptions } from "../../config/types.js";
+import type {
+	CaseExpected,
+	GradeResult,
+	GraderContext,
+	GraderFn,
+	JudgeCallFn,
+	JudgeCallOptions,
+	TargetOutput,
+} from "../../config/types.js";
 import { llmRubric } from "./llm-rubric.js";
 
 export interface FactualityOptions {
@@ -60,7 +68,11 @@ export function factuality(options?: FactualityOptions): GraderFn {
 		passThreshold: options?.passThreshold,
 	});
 
-	return async (output, expected, context) => {
+	const graderFn = async (
+		output: TargetOutput,
+		expected: CaseExpected | undefined,
+		context: GraderContext,
+	): Promise<GradeResult> => {
 		if (!expected?.text) {
 			return {
 				pass: false,
@@ -74,4 +86,6 @@ export function factuality(options?: FactualityOptions): GraderFn {
 		const result = await inner(output, expected, context);
 		return { ...result, graderName: "factuality" };
 	};
+
+	return Object.assign(graderFn, { requiresJudge: true as const });
 }

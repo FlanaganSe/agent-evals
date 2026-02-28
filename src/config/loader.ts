@@ -1,7 +1,15 @@
 import { resolve } from "node:path";
 import { loadConfig as loadC12Config } from "c12";
+import type { EvalPlugin } from "../plugin/types.js";
 import { loadCases } from "./case-loader.js";
-import type { EvalConfig, JudgeConfig, ResolvedSuite, RunMode, SuiteConfig } from "./types.js";
+import type {
+	EvalConfig,
+	JudgeConfig,
+	ReporterConfig,
+	ResolvedSuite,
+	RunMode,
+	SuiteConfig,
+} from "./types.js";
 
 export interface LoadConfigOptions {
 	readonly configPath?: string | undefined;
@@ -16,6 +24,8 @@ export interface ValidatedConfig {
 		readonly rateLimit?: number | undefined;
 	};
 	readonly judge?: JudgeConfig | undefined;
+	readonly plugins: readonly EvalPlugin[];
+	readonly reporters: readonly ReporterConfig[];
 }
 
 /**
@@ -39,6 +49,8 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 	}
 
 	const resolvedSuites = await resolveSuites(config.suites, basePath);
+	const plugins = config.plugins ?? [];
+	validatePlugins(plugins);
 
 	return {
 		suites: resolvedSuites,
@@ -48,7 +60,34 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 			rateLimit: config.run?.rateLimit,
 		},
 		judge: config.judge,
+		plugins,
+		reporters: config.reporters ?? [],
 	};
+}
+
+function validatePlugins(plugins: readonly EvalPlugin[]): void {
+	const graderNames = new Map<string, string>();
+
+	for (const plugin of plugins) {
+		if (!plugin.name) {
+			throw new Error("Plugin missing required 'name' field");
+		}
+		if (!plugin.version) {
+			throw new Error(`Plugin '${plugin.name}' missing required 'version' field`);
+		}
+
+		if (plugin.graders) {
+			for (const graderName of Object.keys(plugin.graders)) {
+				const existing = graderNames.get(graderName);
+				if (existing) {
+					throw new Error(
+						`Duplicate grader name '${graderName}' from plugin '${plugin.name}' (already registered by '${existing}')`,
+					);
+				}
+				graderNames.set(graderName, plugin.name);
+			}
+		}
+	}
 }
 
 async function resolveSuites(
