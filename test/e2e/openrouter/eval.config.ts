@@ -18,6 +18,17 @@ import OpenAI from "openai";
 import { defineConfig } from "../../../src/config/define-config.js";
 import type { CaseInput, TargetOutput } from "../../../src/config/types.js";
 import { contains, latency } from "../../../src/graders/index.js";
+import type { EvalPlugin } from "../../../src/plugin/types.js";
+
+// ─── Cost ───────────────────────────────────────────────────────────────────
+// Approximate per-token rates for cheap models. In production, use your model's actual pricing.
+
+const INPUT_COST_PER_TOKEN = 0.25 / 1_000_000; // $0.25 per million input tokens
+const OUTPUT_COST_PER_TOKEN = 1.25 / 1_000_000; // $1.25 per million output tokens
+
+function tokenCost(input: number, output: number): number {
+	return input * INPUT_COST_PER_TOKEN + output * OUTPUT_COST_PER_TOKEN;
+}
 
 // ─── Target ─────────────────────────────────────────────────────────────────
 
@@ -37,19 +48,52 @@ const target = async (input: CaseInput): Promise<TargetOutput> => {
 		messages: [{ role: "user", content: String(input.prompt) }],
 	});
 
+	const inputTokens = response.usage?.prompt_tokens ?? 0;
+	const outputTokens = response.usage?.completion_tokens ?? 0;
+
 	return {
 		text: response.choices[0]?.message.content ?? "",
 		latencyMs: performance.now() - start,
-		tokenUsage: {
-			input: response.usage?.prompt_tokens ?? 0,
-			output: response.usage?.completion_tokens ?? 0,
-		},
+		tokenUsage: { input: inputTokens, output: outputTokens },
+		cost: tokenCost(inputTokens, outputTokens),
 	};
+};
+
+// ─── Plugins ────────────────────────────────────────────────────────────────
+
+/** Logs suite lifecycle events. Useful for debugging and observability. */
+const timingPlugin: EvalPlugin = {
+	name: "timing",
+	version: "1.0.0",
+	hooks: {
+		beforeRun: async (ctx) => {
+			console.log(
+				`[timing] Starting suite "${ctx.suiteId}" — ${ctx.caseCount} cases, ${ctx.trialCount} trials`,
+			);
+		},
+		afterRun: async (run) => {
+			console.log(
+				`[timing] Finished suite "${run.suiteId}" — pass rate: ${(run.summary.passRate * 100).toFixed(0)}%`,
+			);
+		},
+	},
+};
+
+/** Tracks progress as trials complete. Useful for long-running suites. */
+const progressPlugin: EvalPlugin = {
+	name: "progress",
+	version: "1.0.0",
+	hooks: {
+		afterTrial: async (_trial, ctx) => {
+			console.log(`[progress] ${ctx.completedCount}/${ctx.totalCount} trials complete`);
+		},
+	},
 };
 
 // ─── Suites ─────────────────────────────────────────────────────────────────
 
 export default defineConfig({
+	plugins: [timingPlugin, progressPlugin],
 	suites: [
 		{
 			name: "content-check",

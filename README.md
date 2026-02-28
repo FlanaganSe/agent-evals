@@ -26,6 +26,14 @@ agent-evals list       # list previous runs
 agent-evals doctor     # validate project setup
 ```
 
+## Example plugins
+
+- Slack/webhook notifier — afterRun posts pass rate and regressions to a channel
+- Datadog/telemetry — beforeRun starts a span, afterTrial adds events, afterRun closes it
+- Custom grader pack — a plugin with graders: { "my-org/tone": toneGrader } that your team shares as an npm package
+- Failure screenshotter — afterTrial captures screenshots for failed UI agent cases
+- Cost budget guard — afterTrial tracks cumulative cost and throws if it exceeds a threshold
+
 ## Requirements
 
 - Node.js 20+

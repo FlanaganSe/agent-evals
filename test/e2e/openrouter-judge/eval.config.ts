@@ -46,6 +46,16 @@ const client = new OpenAI({
 	apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+// ─── Cost ───────────────────────────────────────────────────────────────────
+// Approximate per-token rates for cheap models. In production, use your model's actual pricing.
+
+const INPUT_COST_PER_TOKEN = 0.25 / 1_000_000; // $0.25 per million input tokens
+const OUTPUT_COST_PER_TOKEN = 1.25 / 1_000_000; // $1.25 per million output tokens
+
+function tokenCost(input: number, output: number): number {
+	return input * INPUT_COST_PER_TOKEN + output * OUTPUT_COST_PER_TOKEN;
+}
+
 // ─── Target ─────────────────────────────────────────────────────────────────
 // The agent being evaluated. Swap this to test your own agent.
 
@@ -60,13 +70,14 @@ const target = async (input: CaseInput): Promise<TargetOutput> => {
 		messages: [{ role: "user", content: String(input.prompt) }],
 	});
 
+	const inputTokens = response.usage?.prompt_tokens ?? 0;
+	const outputTokens = response.usage?.completion_tokens ?? 0;
+
 	return {
 		text: response.choices[0]?.message.content ?? "",
 		latencyMs: performance.now() - start,
-		tokenUsage: {
-			input: response.usage?.prompt_tokens ?? 0,
-			output: response.usage?.completion_tokens ?? 0,
-		},
+		tokenUsage: { input: inputTokens, output: outputTokens },
+		cost: tokenCost(inputTokens, outputTokens),
 	};
 };
 
