@@ -2,6 +2,8 @@ import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 
 export default defineConfig({
+	site: "https://flanaganse.github.io",
+	base: "/agent-evals",
 	integrations: [
 		starlight({
 			title: "agent-evals",
