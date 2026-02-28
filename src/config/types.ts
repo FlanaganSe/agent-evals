@@ -134,15 +134,22 @@ export interface GraderConfig {
 
 export type GraderFactory<TConfig> = (config: TConfig) => GraderFn;
 
+export interface ReplayConfig {
+	readonly ttlDays?: number | undefined;
+	readonly stripRaw?: boolean | undefined;
+}
+
 export interface SuiteConfig {
 	readonly name: string;
 	readonly description?: string | undefined;
 	readonly target: Target;
-	readonly cases: readonly Case[] | string;
+	readonly cases: readonly (Case | string)[] | string;
 	readonly defaultGraders?: readonly GraderConfig[] | undefined;
 	readonly gates?: GateConfig | undefined;
 	readonly concurrency?: number | undefined;
 	readonly tags?: readonly string[] | undefined;
+	readonly targetVersion?: string | undefined;
+	readonly replay?: ReplayConfig | undefined;
 }
 
 export interface EvalConfig {
@@ -157,6 +164,7 @@ export interface EvalConfig {
 	readonly judge?: JudgeConfig | undefined;
 	readonly plugins?: readonly import("../plugin/types.js").EvalPlugin[] | undefined;
 	readonly reporters?: readonly ReporterConfig[] | undefined;
+	readonly fixtureDir?: string | undefined;
 }
 
 /**
@@ -184,11 +192,20 @@ export interface ResolvedSuite {
 	readonly gates?: GateConfig | undefined;
 	readonly concurrency?: number | undefined;
 	readonly tags?: readonly string[] | undefined;
+	readonly targetVersion?: string | undefined;
+	readonly replay?: ReplayConfig | undefined;
 }
 
 export interface RateLimiter {
 	readonly acquire: (signal?: AbortSignal) => Promise<void>;
 	readonly dispose: () => void;
+}
+
+export interface FixtureOptions {
+	readonly baseDir: string;
+	readonly stripRaw: boolean;
+	readonly ttlDays: number;
+	readonly strictFixtures: boolean;
 }
 
 export interface RunOptions {
@@ -206,6 +223,9 @@ export interface RunOptions {
 	readonly rateLimiter?: RateLimiter | undefined;
 	readonly judge?: JudgeCallFn | undefined;
 	readonly plugins?: readonly import("../plugin/types.js").EvalPlugin[] | undefined;
+	readonly configHash?: string | undefined;
+	readonly fixtureOptions?: FixtureOptions | undefined;
+	readonly onFixtureStale?: ((caseId: string, ageDays: number) => void) | undefined;
 }
 
 export interface RunMeta {

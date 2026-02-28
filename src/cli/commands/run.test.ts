@@ -5,6 +5,7 @@ import { buildRunOptions, parseIntArg } from "./run.js";
 
 const mockTarget = async () => ({ text: "ok", latencyMs: 0 });
 const mockSignal = new AbortController().signal;
+const fixtureDir = ".eval-fixtures";
 
 function makeSuite(overrides?: Partial<ResolvedSuite>): ResolvedSuite {
 	return {
@@ -43,12 +44,18 @@ describe("buildRunOptions", () => {
 	const configDefaults = { defaultMode: "replay" as const, timeoutMs: 30_000 };
 
 	it("uses CLI mode when provided", () => {
-		const opts = buildRunOptions({ mode: "live" }, configDefaults, makeSuite(), mockSignal);
+		const opts = buildRunOptions(
+			{ mode: "live" },
+			configDefaults,
+			makeSuite(),
+			mockSignal,
+			fixtureDir,
+		);
 		expect(opts.mode).toBe("live");
 	});
 
 	it("falls back to config default mode", () => {
-		const opts = buildRunOptions({}, configDefaults, makeSuite(), mockSignal);
+		const opts = buildRunOptions({}, configDefaults, makeSuite(), mockSignal, fixtureDir);
 		expect(opts.mode).toBe("replay");
 	});
 
@@ -58,6 +65,7 @@ describe("buildRunOptions", () => {
 			{ ...configDefaults, timeoutMs: 60_000 },
 			makeSuite(),
 			mockSignal,
+			fixtureDir,
 		);
 		expect(opts.timeoutMs).toBe(60_000);
 	});
@@ -68,22 +76,35 @@ describe("buildRunOptions", () => {
 			configDefaults,
 			makeSuite({ concurrency: 10 }),
 			mockSignal,
+			fixtureDir,
 		);
 		expect(opts.concurrency).toBe(3);
 	});
 
 	it("falls back to suite concurrency", () => {
-		const opts = buildRunOptions({}, configDefaults, makeSuite({ concurrency: 5 }), mockSignal);
+		const opts = buildRunOptions(
+			{},
+			configDefaults,
+			makeSuite({ concurrency: 5 }),
+			mockSignal,
+			fixtureDir,
+		);
 		expect(opts.concurrency).toBe(5);
 	});
 
 	it("passes signal through", () => {
-		const opts = buildRunOptions({}, configDefaults, makeSuite(), mockSignal);
+		const opts = buildRunOptions({}, configDefaults, makeSuite(), mockSignal, fixtureDir);
 		expect(opts.signal).toBe(mockSignal);
 	});
 
 	it("parses trials from string", () => {
-		const opts = buildRunOptions({ trials: "5" }, configDefaults, makeSuite(), mockSignal);
+		const opts = buildRunOptions(
+			{ trials: "5" },
+			configDefaults,
+			makeSuite(),
+			mockSignal,
+			fixtureDir,
+		);
 		expect(opts.trials).toBe(5);
 	});
 
@@ -92,7 +113,46 @@ describe("buildRunOptions", () => {
 			acquire: async () => {},
 			dispose: () => {},
 		};
-		const opts = buildRunOptions({}, configDefaults, makeSuite(), mockSignal, mockLimiter);
+		const opts = buildRunOptions(
+			{},
+			configDefaults,
+			makeSuite(),
+			mockSignal,
+			fixtureDir,
+			mockLimiter,
+		);
 		expect(opts.rateLimiter).toBe(mockLimiter);
+	});
+
+	it("computes configHash and fixtureOptions", () => {
+		const opts = buildRunOptions({}, configDefaults, makeSuite(), mockSignal, fixtureDir);
+		expect(opts.configHash).toBeDefined();
+		expect(opts.configHash).toMatch(/^[a-f0-9]{16}$/);
+		expect(opts.fixtureOptions).toBeDefined();
+		expect(opts.fixtureOptions?.baseDir).toBe(fixtureDir);
+	});
+
+	it("update-fixtures forces live mode + record", () => {
+		const opts = buildRunOptions(
+			{ "update-fixtures": true },
+			configDefaults,
+			makeSuite(),
+			mockSignal,
+			fixtureDir,
+		);
+		expect(opts.mode).toBe("live");
+		expect(opts.record).toBe(true);
+	});
+
+	it("uses suite replay config for fixture options", () => {
+		const opts = buildRunOptions(
+			{},
+			configDefaults,
+			makeSuite({ replay: { ttlDays: 30, stripRaw: false } }),
+			mockSignal,
+			fixtureDir,
+		);
+		expect(opts.fixtureOptions?.ttlDays).toBe(30);
+		expect(opts.fixtureOptions?.stripRaw).toBe(false);
 	});
 });

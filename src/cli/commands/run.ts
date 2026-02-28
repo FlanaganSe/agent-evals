@@ -4,6 +4,7 @@ import { createInterface } from "node:readline";
 import { defineCommand } from "citty";
 import { loadConfig, type ValidatedConfig } from "../../config/loader.js";
 import type {
+	FixtureOptions,
 	JudgeCallFn,
 	ReporterConfig,
 	ReporterConfigWithOptions,
@@ -11,7 +12,9 @@ import type {
 	Run,
 	RunOptions,
 } from "../../config/types.js";
+import { computeFixtureConfigHash } from "../../fixtures/config-hash.js";
 import { formatMarkdownReport } from "../../reporters/markdown.js";
+import { createProgressPlugin } from "../../reporters/progress-plugin.js";
 import { resolveReporter } from "../../reporters/registry.js";
 import type { ReporterPlugin } from "../../reporters/types.js";
 import { estimateCost } from "../../runner/cost-estimator.js";
@@ -49,20 +52,44 @@ export function buildRunOptions(
 		readonly trials?: string | undefined;
 		readonly "strict-fixtures"?: boolean | undefined;
 		readonly "run-id"?: string | undefined;
+		readonly "update-fixtures"?: boolean | undefined;
+		readonly "no-progress"?: boolean | undefined;
+		readonly quiet?: boolean | undefined;
 	},
 	configDefaults: ValidatedConfig["run"],
 	suite: ResolvedSuite,
 	signal: AbortSignal,
+	fixtureDir: string,
 	rateLimiter?: RateLimiter,
 	judge?: JudgeCallFn,
 	previousRun?: Run,
 	plugins?: ValidatedConfig["plugins"],
+	onFixtureStale?: (caseId: string, ageDays: number) => void,
 ): RunOptions {
-	const mode = (args.mode ?? configDefaults.defaultMode ?? "replay") as RunOptions["mode"];
+	const isUpdateFixtures = args["update-fixtures"] ?? false;
+	const mode = isUpdateFixtures
+		? "live"
+		: ((args.mode ?? configDefaults.defaultMode ?? "replay") as RunOptions["mode"]);
+	const record = isUpdateFixtures || (args.record ?? false);
+
+	const configHash = computeFixtureConfigHash(suite);
+	const fixtureOptions: FixtureOptions = {
+		baseDir: fixtureDir,
+		stripRaw: suite.replay?.stripRaw ?? true,
+		ttlDays: suite.replay?.ttlDays ?? 14,
+		strictFixtures: args["strict-fixtures"] ?? false,
+	};
+
+	// Add progress plugin automatically unless disabled
+	const allPlugins = [...(plugins ?? [])];
+	if (!args.quiet && !args["no-progress"]) {
+		allPlugins.push(createProgressPlugin());
+	}
+
 	return {
 		mode,
 		timeoutMs: configDefaults.timeoutMs,
-		record: args.record || undefined,
+		record: record || undefined,
 		concurrency: parseIntArg(args.concurrency, "concurrency") ?? suite.concurrency,
 		signal,
 		previousRunId: args["run-id"],
@@ -71,7 +98,10 @@ export function buildRunOptions(
 		trials: parseIntArg(args.trials, "trials"),
 		rateLimiter,
 		judge,
-		plugins: plugins && plugins.length > 0 ? plugins : undefined,
+		plugins: allPlugins.length > 0 ? allPlugins : undefined,
+		configHash,
+		fixtureOptions,
+		onFixtureStale,
 	};
 }
 
@@ -105,6 +135,9 @@ export interface ExecuteRunArgs {
 	readonly output?: string | undefined;
 	readonly "confirm-cost"?: boolean | undefined;
 	readonly "auto-approve"?: boolean | undefined;
+	readonly "update-fixtures"?: boolean | undefined;
+	readonly "no-progress"?: boolean | undefined;
+	readonly watch?: boolean | undefined;
 }
 
 export async function executeRun(args: ExecuteRunArgs): Promise<void> {
@@ -229,10 +262,16 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 				validatedConfig.run,
 				suite,
 				controller.signal,
+				validatedConfig.fixtureDir,
 				rateLimiter,
 				validatedConfig.judge?.call,
 				previousRun,
 				validatedConfig.plugins,
+				(caseId, ageDays) => {
+					logger.warn(
+						`Fixture for case "${caseId}" is ${ageDays} days old. Consider re-recording.`,
+					);
+				},
 			);
 			const run = await runSuite(suite, options);
 
@@ -349,6 +388,95 @@ async function writeGitHubSummary(run: Run): Promise<void> {
 	await appendFile(summaryPath, `${markdown}\n`);
 }
 
+// ─── Watch mode ─────────────────────────────────────────────────────────────
+
+async function executeWatch(args: ExecuteRunArgs): Promise<void> {
+	const { createFileWatcher } = await import("../../watcher/file-watcher.js");
+	const logger = createLogger({ verbose: args.verbose, quiet: args.quiet });
+
+	// Determine watch paths
+	const cwd = process.cwd();
+	const watchPaths = [cwd];
+
+	const watcher = await createFileWatcher({
+		paths: watchPaths,
+		debounceMs: 300,
+	});
+
+	logger.info("[watch] Watching for changes... (press Ctrl+C to stop)");
+
+	// Initial run
+	await runOnce(args, logger);
+
+	watcher.on("change", async (files) => {
+		const relevantFiles = files.filter(
+			(f) =>
+				f.endsWith(".ts") ||
+				f.endsWith(".js") ||
+				f.endsWith(".jsonl") ||
+				f.endsWith(".yaml") ||
+				f.endsWith(".yml"),
+		);
+		if (relevantFiles.length === 0) return;
+
+		const shortNames = relevantFiles.map((f) => f.replace(`${cwd}/`, ""));
+		logger.info(`\n[watch] Change detected: ${shortNames.join(", ")}`);
+
+		// Clear terminal for clean output
+		if (process.stdout.isTTY) {
+			process.stdout.write("\x1bc");
+		}
+
+		await runOnce(args, logger);
+		logger.info("\n[watch] Watching for changes...");
+	});
+
+	// Wait for Ctrl+C
+	await new Promise<void>((resolve) => {
+		const handleSignal = (): void => {
+			logger.info("\n[watch] Stopped.");
+			watcher.close().then(resolve);
+		};
+		process.on("SIGINT", handleSignal);
+		process.on("SIGTERM", handleSignal);
+	});
+}
+
+async function runOnce(
+	args: ExecuteRunArgs,
+	logger: ReturnType<typeof createLogger>,
+): Promise<void> {
+	try {
+		const validatedConfig = await loadConfigSafe(args.config);
+		const suites = filterSuites(validatedConfig.suites, args.suite);
+
+		const controller = new AbortController();
+
+		for (const rawSuite of suites) {
+			let suite = rawSuite;
+			if (args.filter) {
+				suite = filterCases(suite, args.filter);
+			}
+
+			const options = buildRunOptions(
+				args,
+				validatedConfig.run,
+				suite,
+				controller.signal,
+				validatedConfig.fixtureDir,
+				undefined,
+				validatedConfig.judge?.call,
+				undefined,
+				validatedConfig.plugins,
+			);
+			const run = await runSuite(suite, options);
+			await dispatchReporters(run, args, validatedConfig.reporters);
+		}
+	} catch (err) {
+		logger.error(err instanceof Error ? err.message : String(err));
+	}
+}
+
 // ─── citty command definition ───────────────────────────────────────────────
 
 // biome-ignore lint/style/noDefaultExport: citty subcommands require default exports
@@ -424,8 +552,28 @@ export default defineCommand({
 			description: "Skip cost confirmation in non-interactive environments",
 			default: false,
 		},
+		"update-fixtures": {
+			type: "boolean" as const,
+			description: "Re-record all fixtures (forces live mode + record)",
+			default: false,
+		},
+		"no-progress": {
+			type: "boolean" as const,
+			description: "Disable live progress output",
+			default: false,
+		},
+		watch: {
+			type: "boolean" as const,
+			alias: "w",
+			description: "Watch for changes and re-run automatically",
+			default: false,
+		},
 	},
 	async run({ args }) {
-		await executeRun(args);
+		if (args.watch) {
+			await executeWatch(args);
+		} else {
+			await executeRun(args);
+		}
 	},
 });

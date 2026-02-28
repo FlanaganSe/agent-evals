@@ -16,6 +16,7 @@ const main = defineCommand({
 		doctor: () => import("./commands/doctor.js").then((m) => m.default),
 		init: () => import("./commands/init.js").then((m) => m.default),
 		"install-hooks": () => import("./commands/install-hooks.js").then((m) => m.default),
+		mcp: () => import("./commands/mcp.js").then((m) => m.default),
 	},
 });
 

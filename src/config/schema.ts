@@ -74,13 +74,20 @@ export const CaseSchema = z.strictObject({
 // runtime-only types (target function, GraderFn) that are not serializable.
 // Suite validation happens at the runtime level in types.ts / loader.ts.
 
+export const ReplayConfigSchema = z.strictObject({
+	ttlDays: z.number().int().positive().default(14),
+	stripRaw: z.boolean().default(true),
+});
+
 export const SuiteConfigSchema = z.strictObject({
 	name: z.string(),
 	description: z.string().optional(),
-	cases: z.union([z.array(CaseSchema).readonly(), z.string()]),
+	cases: z.union([z.array(z.union([CaseSchema, z.string()])).readonly(), z.string()]),
 	gates: GateConfigSchema.optional(),
 	concurrency: z.number().int().positive().optional(),
 	tags: z.array(z.string()).readonly().optional(),
+	targetVersion: z.string().optional(),
+	replay: ReplayConfigSchema.optional(),
 });
 
 // ─── Execution types ─────────────────────────────────────────────────────────
@@ -162,7 +169,7 @@ export const RunSchema = z.strictObject({
 	frameworkVersion: z.string(),
 });
 
-// ─── Fixture types (Phase 2 stub) ───────────────────────────────────────────
+// ─── Fixture types ──────────────────────────────────────────────────────────
 
 export const FixtureMetaSchema = z.strictObject({
 	schemaVersion: z.string(),
@@ -170,6 +177,7 @@ export const FixtureMetaSchema = z.strictObject({
 	caseId: z.string(),
 	configHash: z.string(),
 	recordedAt: z.string(),
+	frameworkVersion: z.string(),
 });
 
 export const FixtureEntrySchema = z.strictObject({
@@ -188,4 +196,5 @@ export const EvalConfigSchema = z.strictObject({
 			rateLimit: z.number().int().positive().optional(),
 		})
 		.optional(),
+	fixtureDir: z.string().optional(),
 });

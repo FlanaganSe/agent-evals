@@ -63,7 +63,10 @@ export function createCachingJudge(judge: JudgeCallFn, options?: JudgeCacheOptio
 	};
 }
 
-function computeCacheKey(messages: readonly JudgeMessage[], options?: JudgeCallOptions): string {
+export function computeCacheKey(
+	messages: readonly JudgeMessage[],
+	options?: JudgeCallOptions,
+): string {
 	const payload = JSON.stringify({
 		messages: messages.map((m) => ({ role: m.role, content: m.content })),
 		model: options?.model,

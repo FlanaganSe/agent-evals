@@ -29,6 +29,7 @@ export {
 	GateConfigSchema,
 	GateResultSchema,
 	GradeResultSchema,
+	ReplayConfigSchema,
 	RunModeSchema,
 	RunSchema,
 	RunSummarySchema,
@@ -48,6 +49,7 @@ export type {
 	CaseResult,
 	CategorySummary,
 	EvalConfig,
+	FixtureOptions,
 	GateCheckResult,
 	GateConfig,
 	GateResult,
@@ -61,6 +63,7 @@ export type {
 	JudgeMessage,
 	JudgeResponse,
 	RateLimiter,
+	ReplayConfig,
 	ReporterConfig,
 	ReporterConfigWithOptions,
 	ResolvedSuite,
@@ -77,9 +80,24 @@ export type {
 	Trial,
 	TrialStats,
 } from "./config/types.js";
+// Fixtures
+export { computeFixtureConfigHash } from "./fixtures/config-hash.js";
+export type { FixtureReadResult, FixtureStatsResult } from "./fixtures/fixture-store.js";
+export {
+	clearFixtures,
+	fixtureStats,
+	listFixtures,
+	readFixture,
+	writeFixture,
+} from "./fixtures/fixture-store.js";
 // LLM Graders
 export { factuality } from "./graders/llm/factuality.js";
 export { createCachingJudge } from "./graders/llm/judge-cache.js";
+export {
+	clearJudgeCache,
+	createDiskCachingJudge,
+	judgeCacheStats,
+} from "./graders/llm/judge-disk-cache.js";
 export { type LlmClassifyOptions, llmClassify } from "./graders/llm/llm-classify.js";
 export { llmRubric } from "./graders/llm/llm-rubric.js";
 // Plugin
@@ -94,6 +112,8 @@ export { formatConsoleReport, formatMarkdownSummary } from "./reporters/console.
 export { formatJsonReport } from "./reporters/json.js";
 export { formatJunitXml } from "./reporters/junit.js";
 export { formatMarkdownReport } from "./reporters/markdown.js";
+// Progress
+export { createProgressPlugin } from "./reporters/progress-plugin.js";
 export { resolveReporter } from "./reporters/registry.js";
 export type { ReporterOptions, ReporterPlugin } from "./reporters/types.js";
 // Runner
@@ -103,3 +123,6 @@ export { runSuite } from "./runner/runner.js";
 export { computeAllTrialStats, computeTrialStats, wilsonInterval } from "./runner/statistics.js";
 // Storage
 export { listRuns, loadRun, saveRun } from "./storage/run-store.js";
+export type { FileWatcher, FileWatcherOptions } from "./watcher/file-watcher.js";
+// Watcher
+export { createFileWatcher } from "./watcher/file-watcher.js";

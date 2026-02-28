@@ -10,6 +10,7 @@ import type {
 	TargetOutput,
 	Trial,
 } from "../config/types.js";
+import { readFixture, writeFixture } from "../fixtures/fixture-store.js";
 import { VERSION } from "../index.js";
 import { createHookDispatcher } from "../plugin/hooks.js";
 import { evaluateGates } from "./gate.js";
@@ -220,27 +221,81 @@ async function executeCase(
 	const caseStart = Date.now();
 
 	let output: TargetOutput;
-	try {
-		output = await withTimeout(
-			() => suite.target(testCase.input),
-			options.timeoutMs,
-			options.signal,
+
+	if (options.mode === "replay" && options.fixtureOptions && options.configHash) {
+		// Replay mode — load from fixture store
+		const fixtureResult = await readFixture(
+			suite.name,
+			testCase.id,
+			options.configHash,
+			options.fixtureOptions,
 		);
-	} catch (err) {
-		const durationMs = Date.now() - caseStart;
-		const message = err instanceof Error ? err.message : String(err);
-		return {
-			caseId: testCase.id,
-			status: "error",
-			output: {
-				text: `Target error: ${message}`,
-				latencyMs: durationMs,
-			},
-			grades: [],
-			score: 0,
-			durationMs,
-			trialIndex: options.trials && options.trials > 1 ? trialIndex : undefined,
-		};
+
+		if (fixtureResult.status === "miss") {
+			if (fixtureResult.reason === "not-found") {
+				throw new Error(
+					`No fixture found for case "${testCase.id}" in suite "${suite.name}". ` +
+						`Run with --mode=live --record to create fixtures.`,
+				);
+			}
+			if (fixtureResult.reason === "config-hash-mismatch") {
+				throw new Error(
+					`Fixture for case "${testCase.id}" was recorded with a different config (hash: ${fixtureResult.recordedHash}). ` +
+						`Re-record with --mode=live --record or bump targetVersion.`,
+				);
+			}
+		}
+
+		if (fixtureResult.status === "stale") {
+			if (options.strictFixtures) {
+				throw new Error(
+					`Fixture for case "${testCase.id}" is ${fixtureResult.ageDays} days old (TTL: ${options.fixtureOptions.ttlDays} days). ` +
+						`Re-record or pass --no-strict-fixtures.`,
+				);
+			}
+			options.onFixtureStale?.(testCase.id, fixtureResult.ageDays);
+		}
+
+		output =
+			fixtureResult.status === "hit" || fixtureResult.status === "stale"
+				? fixtureResult.output
+				: // Should never reach here — handled by miss cases above
+					({ text: "", latencyMs: 0 } satisfies TargetOutput);
+	} else {
+		// Live mode — call target
+		try {
+			output = await withTimeout(
+				() => suite.target(testCase.input),
+				options.timeoutMs,
+				options.signal,
+			);
+		} catch (err) {
+			const durationMs = Date.now() - caseStart;
+			const message = err instanceof Error ? err.message : String(err);
+			return {
+				caseId: testCase.id,
+				status: "error",
+				output: {
+					text: `Target error: ${message}`,
+					latencyMs: durationMs,
+				},
+				grades: [],
+				score: 0,
+				durationMs,
+				trialIndex: options.trials && options.trials > 1 ? trialIndex : undefined,
+			};
+		}
+
+		// Record fixture if requested
+		if (options.record && options.fixtureOptions && options.configHash) {
+			await writeFixture(
+				suite.name,
+				testCase.id,
+				output,
+				options.configHash,
+				options.fixtureOptions,
+			);
+		}
 	}
 
 	const durationMs = Date.now() - caseStart;

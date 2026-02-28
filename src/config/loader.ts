@@ -3,6 +3,7 @@ import { loadConfig as loadC12Config } from "c12";
 import type { EvalPlugin } from "../plugin/types.js";
 import { loadCases } from "./case-loader.js";
 import type {
+	Case,
 	EvalConfig,
 	JudgeConfig,
 	ReporterConfig,
@@ -26,6 +27,7 @@ export interface ValidatedConfig {
 	readonly judge?: JudgeConfig | undefined;
 	readonly plugins: readonly EvalPlugin[];
 	readonly reporters: readonly ReporterConfig[];
+	readonly fixtureDir: string;
 }
 
 /**
@@ -62,6 +64,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 		judge: config.judge,
 		plugins,
 		reporters: config.reporters ?? [],
+		fixtureDir: config.fixtureDir ?? ".eval-fixtures",
 	};
 }
 
@@ -90,6 +93,28 @@ function validatePlugins(plugins: readonly EvalPlugin[]): void {
 	}
 }
 
+async function resolveCases(
+	cases: readonly (Case | string)[] | string,
+	basePath: string,
+): Promise<readonly Case[]> {
+	// Single file path — load all cases from it
+	if (typeof cases === "string") {
+		return loadCases(resolve(basePath, cases));
+	}
+
+	// Mixed array — inline cases + file paths
+	const result: Case[] = [];
+	for (const entry of cases) {
+		if (typeof entry === "string") {
+			const loaded = await loadCases(resolve(basePath, entry));
+			result.push(...loaded);
+		} else {
+			result.push(entry);
+		}
+	}
+	return result;
+}
+
 async function resolveSuites(
 	suites: readonly SuiteConfig[],
 	basePath: string,
@@ -97,10 +122,7 @@ async function resolveSuites(
 	const resolved: ResolvedSuite[] = [];
 
 	for (const suite of suites) {
-		const cases =
-			typeof suite.cases === "string"
-				? await loadCases(resolve(basePath, suite.cases))
-				: suite.cases;
+		const cases = await resolveCases(suite.cases, basePath);
 
 		resolved.push({
 			name: suite.name,
@@ -111,6 +133,8 @@ async function resolveSuites(
 			gates: suite.gates,
 			concurrency: suite.concurrency,
 			tags: suite.tags,
+			targetVersion: suite.targetVersion,
+			replay: suite.replay,
 		});
 	}
 
