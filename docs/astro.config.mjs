@@ -11,7 +11,7 @@ export default defineConfig({
 				{
 					icon: "github",
 					label: "GitHub",
-					href: "https://github.com/your-org/agent-evals",
+					href: "https://github.com/FlanaganSe/agent-evals",
 				},
 			],
 			sidebar: [
