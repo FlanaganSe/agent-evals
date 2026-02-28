@@ -5,7 +5,7 @@
 	"author": "Sean Flanagan <flanspan11@gmail.com>",
 	"repository": {
 		"type": "git",
-		"url": "git+github.com:FlanaganSe/agent-evals.git"
+		"url": "git+https://github.com/FlanaganSe/agent-evals.git"
 	},
 	"homepage": "https://github.com/FlanaganSe/agent-evals#readme",
 	"bugs": {
@@ -61,10 +61,10 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"typecheck": "tsc --noEmit",
-		"prepare": "lefthook install",
+		"prepare": "lefthook install || true",
 		"verify": "pnpm typecheck && pnpm lint && pnpm test",
 		"validate-package": "pnpm build && npx publint && npx @arethetypeswrong/cli --pack . --profile esm-only",
-		"prepublishOnly": "pnpm build"
+		"prepublishOnly": "pnpm clean && pnpm build"
 	},
 	"keywords": [
 		"ai",
@@ -99,7 +99,7 @@
 		"vitest": "^4.0.18"
 	},
 	"peerDependencies": {
-		"@modelcontextprotocol/sdk": "^1.20.0"
+		"@modelcontextprotocol/sdk": "^1.27.1"
 	},
 	"peerDependenciesMeta": {
 		"@modelcontextprotocol/sdk": {
