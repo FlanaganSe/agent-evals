@@ -1,0 +1,69 @@
+---
+title: agent-evals
+description: TypeScript-native eval framework for AI agent workflows
+template: splash
+hero:
+  tagline: Record-replay, deterministic graders, LLM-as-judge, CI integration. Ship confident AI agents with $0 pre-push evals.
+  actions:
+    - text: Get Started
+      link: /getting-started/quick-start/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/your-org/agent-evals
+      variant: minimal
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why agent-evals?
+
+<CardGrid stagger>
+  <Card title="Record & Replay" icon="pencil">
+    Record API responses once, replay them instantly. Run evals in milliseconds with zero API costs during development.
+  </Card>
+  <Card title="18 Built-in Graders" icon="approve-check">
+    From exact-match to semantic similarity. Compose graders, weight scores, and set quality gates — all deterministic, no LLM needed.
+  </Card>
+  <Card title="LLM-as-Judge" icon="star">
+    When deterministic graders aren't enough, use LLM rubric scoring with built-in caching, bias mitigation, and cost tracking.
+  </Card>
+  <Card title="CI-Ready" icon="rocket">
+    Quality gates with configurable thresholds. Fail your CI pipeline when eval scores regress below acceptable levels.
+  </Card>
+</CardGrid>
+
+## Quick Example
+
+```typescript
+// eval.config.ts
+import { defineConfig } from "agent-evals";
+
+export default defineConfig({
+  suites: {
+    smoke: {
+      target: async (input) => {
+        const response = await myAgent(input.prompt);
+        return { text: response.text, latencyMs: response.latencyMs };
+      },
+      cases: "cases/smoke.yaml",
+      graders: [
+        { name: "contains", options: { substring: "expected output" } },
+        { name: "latency", options: { maxMs: 5000 } },
+      ],
+      gates: { minPassRate: 0.9 },
+    },
+  },
+});
+```
+
+```bash
+# Record fixtures (calls your agent once)
+agent-evals run --mode=live --record --suite=smoke
+
+# Replay from fixtures (instant, $0)
+agent-evals run --mode=replay --suite=smoke
+
+# Watch mode for development
+agent-evals run --watch --mode=replay --suite=smoke
+```

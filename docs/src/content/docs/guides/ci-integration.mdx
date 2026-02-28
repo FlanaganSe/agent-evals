@@ -1,0 +1,93 @@
+---
+title: CI Integration
+description: Run evals in your CI pipeline with quality gates
+---
+
+## GitHub Actions
+
+Add evals to your CI pipeline with this workflow:
+
+```yaml
+# .github/workflows/evals.yml
+name: Eval Suite
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Replay from recorded fixtures (instant, $0)
+      - name: Run evals
+        run: pnpm agent-evals run --mode=replay --suite=smoke
+
+      # Or run live with strict fixtures
+      - name: Run evals (strict)
+        run: pnpm agent-evals run --mode=replay --strict-fixtures --suite=smoke
+```
+
+## Quality gates in CI
+
+Gates determine the exit code. When a gate fails, `agent-evals run` exits with code 1, failing the CI step.
+
+```typescript
+// eval.config.ts
+gates: {
+  minPassRate: 0.95,     // 95% pass rate required
+  maxFailCount: 2,       // At most 2 failures
+  requireCategories: {
+    critical: 1.0,       // 100% for critical cases
+  },
+}
+```
+
+## Pre-push hooks
+
+Run evals before every push:
+
+```bash
+# Install git hooks
+agent-evals install-hooks
+```
+
+This adds a pre-push hook that runs `agent-evals run --mode=replay`. Failed gates block the push.
+
+## Comparing across branches
+
+```bash
+# On your PR branch, after running evals:
+agent-evals compare --base=<main-run-id> --compare=<pr-run-id>
+```
+
+The comparison highlights regressions, improvements, and score deltas.
+
+## Recording fixtures in CI
+
+For the initial fixture recording, run in live mode once:
+
+```bash
+# Record fixtures (requires API keys)
+OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+  agent-evals run --mode=live --record --suite=smoke
+```
+
+Commit the `.eval-fixtures/` directory to your repository. Subsequent CI runs use replay mode.
+
+## Tips
+
+- **Commit fixtures**: Check `.eval-fixtures/` into git for reproducible CI runs
+- **Use `targetVersion`**: Bump the version when your agent changes significantly to invalidate old fixtures
+- **Separate suites**: Use a fast `smoke` suite for pre-push and a thorough `full` suite for CI
+- **Cache the judge cache**: The `.eval-cache/` directory can be cached between CI runs to avoid redundant LLM calls

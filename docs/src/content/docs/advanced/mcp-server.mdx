@@ -1,0 +1,77 @@
+---
+title: MCP Server
+description: AI assistant integration via Model Context Protocol
+---
+
+## Overview
+
+agent-evals includes an MCP (Model Context Protocol) server that lets AI coding assistants run evals, inspect results, and compare runs without leaving the editor.
+
+## Setup
+
+### 1. Install the MCP SDK
+
+```bash
+pnpm add @modelcontextprotocol/sdk
+```
+
+### 2. Configure your AI assistant
+
+Add to your assistant's MCP configuration (e.g., `.claude/settings.json` for Claude Code):
+
+```json
+{
+  "mcpServers": {
+    "agent-evals": {
+      "command": "npx",
+      "args": ["agent-evals", "mcp"],
+      "cwd": "/path/to/your/project"
+    }
+  }
+}
+```
+
+### 3. Start using
+
+The MCP server exposes 4 tools:
+
+## Tools
+
+### `run-suite`
+
+Execute an eval suite and get results.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `suite` | string | (required) | Suite name to run |
+| `mode` | `live\|replay` | `replay` | Execution mode |
+| `record` | boolean | `false` | Record fixtures in live mode |
+
+### `list-runs`
+
+List recent eval runs with IDs, timestamps, and pass rates.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | number | `10` | Maximum runs to return |
+
+### `compare-runs`
+
+Compare two runs and show regressions, improvements, and score deltas.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `baseRunId` | string | Base run ID (older) |
+| `compareRunId` | string | Compare run ID (newer) |
+
+### `get-run-details`
+
+Get detailed results for a specific run including per-case grades.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `runId` | string | Run ID to inspect |
+
+## Stdio safety
+
+The MCP server uses stdio transport. All JSON-RPC communication goes over stdout. All logging goes to stderr. This is handled automatically — no configuration needed.

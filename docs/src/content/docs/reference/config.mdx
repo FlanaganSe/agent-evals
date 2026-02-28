@@ -1,0 +1,112 @@
+---
+title: Config Reference
+description: Complete configuration schema for agent-evals
+---
+
+## Config file
+
+agent-evals uses [c12](https://github.com/unjs/c12) for config loading. Create one of:
+
+- `eval.config.ts` (recommended)
+- `eval.config.js`
+- `eval.config.mjs`
+- `eval.config.yaml`
+- `eval.config.json`
+
+```typescript
+import { defineConfig } from "agent-evals";
+
+export default defineConfig({
+  // ... configuration
+});
+```
+
+## Top-level options
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `suites` | `Record<string, SuiteConfig>` | (required) | Named eval suites |
+| `judge` | `JudgeConfig` | — | Global LLM judge configuration |
+| `fixtureDir` | `string` | `.eval-fixtures` | Directory for recorded fixtures |
+| `plugins` | `EvalPlugin[]` | `[]` | Plugins to apply to all suites |
+| `reporters` | `ReporterConfig[]` | `["console"]` | Output reporters |
+
+## Suite config
+
+Each suite defines a target, cases, graders, and gates.
+
+```typescript
+{
+  suites: {
+    smoke: {
+      target: async (input) => ({ text: "response", latencyMs: 100 }),
+      cases: "cases/smoke.yaml",
+      graders: [{ name: "contains", options: { substring: "hello" } }],
+      gates: { minPassRate: 0.9 },
+      targetVersion: "v1.2.0",
+      replay: { ttlDays: 30, stripRaw: true },
+    },
+  },
+}
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `target` | `(input) => Promise<TargetOutput>` | (required) | Function that calls your agent/API |
+| `cases` | `Case[] \| string` | (required) | Inline cases or path to YAML file |
+| `graders` | `GraderConfig[]` | `[]` | Graders applied to all cases (unless overridden) |
+| `gates` | `GateConfig` | `{}` | Quality thresholds |
+| `targetVersion` | `string` | — | Version identifier for fixture invalidation |
+| `replay` | `ReplayConfig` | `{}` | Replay-specific settings |
+
+## Case format
+
+```yaml
+- id: unique-case-id
+  input:
+    prompt: "User question"
+    context: "Optional context"
+  expected:
+    text: "Expected response"
+    containsAll: ["keyword1", "keyword2"]
+  category: "optional-category"
+  graders:  # Optional: overrides suite graders for this case
+    - name: exact-match
+```
+
+## Gate config
+
+```typescript
+gates: {
+  minPassRate: 0.9,          // Minimum overall pass rate
+  maxFailCount: 5,           // Maximum number of failures
+  requireCategories: {
+    critical: 1.0,           // 100% pass rate for "critical" category
+    regression: 0.95,        // 95% for "regression" category
+  },
+}
+```
+
+## Replay config
+
+```typescript
+replay: {
+  ttlDays: 30,    // Fixture staleness threshold (default: 30)
+  stripRaw: true, // Remove raw response field from fixtures
+}
+```
+
+## Target output
+
+The target function must return a `TargetOutput`:
+
+```typescript
+interface TargetOutput {
+  text: string;              // Main text response
+  latencyMs: number;         // Response latency
+  raw?: unknown;             // Raw API response (stripped in fixtures if configured)
+  toolCalls?: ToolCall[];    // Tool/function calls made
+  tokenUsage?: TokenUsage;   // Token counts
+  cost?: number;             // Estimated cost in USD
+}
+```

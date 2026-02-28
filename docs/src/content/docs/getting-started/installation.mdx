@@ -1,0 +1,61 @@
+---
+title: Installation
+description: Install agent-evals and set up your first eval project
+---
+
+## Prerequisites
+
+- **Node.js** 20+ (22 LTS recommended for native TypeScript execution)
+- **pnpm**, **npm**, or **yarn** package manager
+
+## Install
+
+```bash
+# pnpm (recommended)
+pnpm add -D agent-evals
+
+# npm
+npm install --save-dev agent-evals
+
+# yarn
+yarn add --dev agent-evals
+```
+
+## Optional dependencies
+
+### MCP Server (AI assistant integration)
+
+If you want to use the MCP server for Claude Code, Cursor, or other AI assistants:
+
+```bash
+pnpm add @modelcontextprotocol/sdk
+```
+
+### Watch mode on Linux
+
+Watch mode uses native `fs.watch` on macOS and Windows. On Linux, it automatically uses `chokidar` which is included as a dependency.
+
+## Verify installation
+
+```bash
+npx agent-evals --help
+```
+
+You should see the available commands listed.
+
+## Initialize a project
+
+The `init` wizard creates a starter config and case files:
+
+```bash
+npx agent-evals init
+```
+
+This creates:
+- `eval.config.ts` — main configuration file
+- `cases/` — directory for test case YAML files
+- `.gitignore` entries for `.eval-runs/` and `.eval-fixtures/`
+
+## Next steps
+
+Continue to [Quick Start](/getting-started/quick-start/) to run your first eval.

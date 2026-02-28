@@ -1,0 +1,121 @@
+---
+title: CLI Reference
+description: Complete reference for all agent-evals CLI commands and flags
+---
+
+## Global flags
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--verbose` | boolean | Enable verbose output |
+| `--quiet` | boolean | Suppress non-essential output |
+
+## Commands
+
+### `run`
+
+Execute an eval suite against the target function.
+
+```bash
+agent-evals run [options]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--suite` | string | (all) | Suite name to run |
+| `--mode` | `live\|replay\|judge-only` | `live` | Execution mode |
+| `--record` | boolean | `false` | Record fixtures during live mode |
+| `--trials` | number | `1` | Number of trials per case |
+| `--concurrency` | number | `1` | Max parallel case executions |
+| `--timeout` | number | `30000` | Per-case timeout in milliseconds |
+| `--run-id` | string | — | Previous run ID (for judge-only mode) |
+| `--update-fixtures` | boolean | `false` | Force live mode + record (re-record all fixtures) |
+| `--no-progress` | boolean | `false` | Disable live progress display |
+| `--watch` | boolean | `false` | Re-run on file changes |
+| `--strict-fixtures` | boolean | `false` | Fail on stale fixtures instead of warning |
+
+### `record`
+
+Shorthand for `run --mode=live --record`.
+
+```bash
+agent-evals record --suite=smoke
+```
+
+### `compare`
+
+Compare two eval runs side-by-side.
+
+```bash
+agent-evals compare --base=<run-id> --compare=<run-id>
+```
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--base` | string | Base run ID (older, "before") |
+| `--compare` | string | Compare run ID (newer, "after") |
+
+### `list`
+
+List recent eval runs.
+
+```bash
+agent-evals list
+```
+
+### `cache`
+
+Cache management commands.
+
+#### `cache stats`
+
+Show cache statistics for fixtures and judge cache.
+
+```bash
+agent-evals cache stats
+```
+
+#### `cache clear`
+
+Clear fixture or judge cache.
+
+```bash
+agent-evals cache clear              # Clear fixture cache
+agent-evals cache clear --judge      # Clear judge cache only
+agent-evals cache clear --all        # Clear all caches
+agent-evals cache clear --suite=foo  # Clear fixtures for specific suite
+```
+
+### `doctor`
+
+Run health checks on your eval setup.
+
+```bash
+agent-evals doctor
+```
+
+### `init`
+
+Initialize a new eval project with config and case files.
+
+```bash
+agent-evals init
+```
+
+### `install-hooks`
+
+Install git hooks for pre-push eval checks.
+
+```bash
+agent-evals install-hooks
+```
+
+### `mcp`
+
+Start the MCP server for AI assistant integration.
+
+```bash
+agent-evals mcp
+```
+
+Requires `@modelcontextprotocol/sdk` to be installed. See [MCP Server](/advanced/mcp-server/) for configuration details.

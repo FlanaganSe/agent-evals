@@ -1,0 +1,228 @@
+---
+title: Graders API
+description: Reference for all built-in graders
+---
+
+## Deterministic Graders
+
+These graders are pure functions — fast, free, and reproducible.
+
+### `exact-match`
+
+Checks if output text exactly matches expected text.
+
+```yaml
+graders:
+  - name: exact-match
+```
+
+### `contains`
+
+Checks if output contains a substring.
+
+```yaml
+graders:
+  - name: contains
+    options:
+      substring: "expected text"
+      caseSensitive: false  # default: false
+```
+
+### `contains-all`
+
+Checks if output contains all specified substrings.
+
+```yaml
+graders:
+  - name: contains-all
+    options:
+      substrings: ["keyword1", "keyword2"]
+```
+
+### `contains-any`
+
+Checks if output contains at least one of the specified substrings.
+
+```yaml
+graders:
+  - name: contains-any
+    options:
+      substrings: ["option1", "option2"]
+```
+
+### `regex`
+
+Tests output against a regular expression.
+
+```yaml
+graders:
+  - name: regex
+    options:
+      pattern: "\\d{3}-\\d{4}"
+      flags: "i"
+```
+
+### `starts-with`
+
+Checks if output starts with a prefix.
+
+```yaml
+graders:
+  - name: starts-with
+    options:
+      prefix: "Hello"
+```
+
+### `ends-with`
+
+Checks if output ends with a suffix.
+
+```yaml
+graders:
+  - name: ends-with
+    options:
+      suffix: "Thank you."
+```
+
+### `length`
+
+Validates output length is within bounds.
+
+```yaml
+graders:
+  - name: length
+    options:
+      min: 10
+      max: 500
+```
+
+### `json-schema`
+
+Validates that output is valid JSON matching a schema.
+
+```yaml
+graders:
+  - name: json-schema
+    options:
+      schema:
+        type: object
+        required: ["name", "age"]
+```
+
+### `json-valid`
+
+Checks if output is valid JSON.
+
+```yaml
+graders:
+  - name: json-valid
+```
+
+### `latency`
+
+Checks if response latency is within threshold.
+
+```yaml
+graders:
+  - name: latency
+    options:
+      maxMs: 5000
+```
+
+### `cost`
+
+Checks if response cost is within budget.
+
+```yaml
+graders:
+  - name: cost
+    options:
+      maxCost: 0.05  # USD
+```
+
+### `tool-called`
+
+Checks if specific tools were called.
+
+```yaml
+graders:
+  - name: tool-called
+    options:
+      toolName: "search"
+```
+
+### `tool-count`
+
+Validates the number of tool calls.
+
+```yaml
+graders:
+  - name: tool-count
+    options:
+      min: 1
+      max: 3
+```
+
+### `levenshtein`
+
+Scores based on edit distance between output and expected text.
+
+```yaml
+graders:
+  - name: levenshtein
+    options:
+      maxDistance: 10
+```
+
+### `numeric-closeness`
+
+Scores based on how close a numeric output is to an expected value.
+
+```yaml
+graders:
+  - name: numeric-closeness
+    options:
+      tolerance: 0.1
+```
+
+## LLM Graders
+
+These require a `judge` configuration in your eval config.
+
+### `llm-rubric`
+
+Scores output against a rubric using an LLM judge.
+
+```yaml
+graders:
+  - name: llm-rubric
+    options:
+      rubric: |
+        Score the response on helpfulness (1-5):
+        5: Comprehensive, actionable answer
+        1: Unhelpful or irrelevant
+      passThreshold: 3
+```
+
+### `factuality`
+
+Checks if the output is factually consistent with expected content.
+
+```yaml
+graders:
+  - name: factuality
+```
+
+## Composing Graders
+
+Apply multiple graders with weights:
+
+```typescript
+graders: [
+  { name: "contains", options: { substring: "hello" }, weight: 0.3 },
+  { name: "latency", options: { maxMs: 5000 }, weight: 0.2 },
+  { name: "llm-rubric", options: { rubric: "..." }, weight: 0.5 },
+]
+```
+
+The final score is a weighted average. A case passes if the weighted score meets the pass threshold (default: 0.5).

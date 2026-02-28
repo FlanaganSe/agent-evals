@@ -1,0 +1,14 @@
+# agent-evals
+
+> TypeScript-native eval framework for AI agent workflows. Record-replay, deterministic graders, LLM-as-judge, CI integration.
+
+## Docs
+
+- [Getting Started](/getting-started/quick-start/)
+- [CLI Reference](/reference/cli/)
+- [Graders API](/reference/graders-api/)
+- [Config Reference](/reference/config/)
+- [Plugin API](/reference/plugin-api/)
+- [Record & Replay Guide](/guides/record-replay/)
+- [CI Integration](/guides/ci-integration/)
+- [MCP Server](/advanced/mcp-server/)

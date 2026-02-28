@@ -1,0 +1,104 @@
+---
+title: Quick Start
+description: Run your first eval in under 5 minutes
+---
+
+## 1. Create your config
+
+After [installation](/getting-started/installation/), create `eval.config.ts` in your project root:
+
+```typescript
+import { defineConfig } from "agent-evals";
+
+export default defineConfig({
+  suites: {
+    smoke: {
+      target: async (input) => {
+        // Replace with your actual agent/API call
+        const response = await fetch("https://api.example.com/chat", {
+          method: "POST",
+          body: JSON.stringify({ prompt: input.prompt }),
+        });
+        const data = await response.json();
+        return {
+          text: data.message,
+          latencyMs: data.latencyMs ?? 0,
+        };
+      },
+      cases: "cases/smoke.yaml",
+      graders: [
+        { name: "contains", options: { substring: "hello" } },
+      ],
+      gates: { minPassRate: 0.8 },
+    },
+  },
+});
+```
+
+## 2. Define test cases
+
+Create `cases/smoke.yaml`:
+
+```yaml
+- id: greeting
+  input:
+    prompt: "Say hello to the user"
+  expected:
+    text: "hello"
+
+- id: farewell
+  input:
+    prompt: "Say goodbye to the user"
+  expected:
+    text: "goodbye"
+```
+
+## 3. Run in live mode
+
+```bash
+# Run against your real API
+agent-evals run --suite=smoke
+```
+
+This calls your target for each case, grades the output, and prints a summary.
+
+## 4. Record fixtures
+
+```bash
+# Record API responses for instant replay
+agent-evals run --mode=live --record --suite=smoke
+```
+
+Fixtures are saved to `.eval-fixtures/smoke/`.
+
+## 5. Replay from fixtures
+
+```bash
+# Instant, zero-cost replay
+agent-evals run --mode=replay --suite=smoke
+```
+
+No API calls are made — the recorded responses are replayed and graded.
+
+## 6. Watch mode
+
+```bash
+# Re-run on file changes
+agent-evals run --watch --mode=replay --suite=smoke
+```
+
+## 7. Compare runs
+
+```bash
+# List recent runs
+agent-evals list
+
+# Compare two runs
+agent-evals compare --base=<run-id-1> --compare=<run-id-2>
+```
+
+## Next steps
+
+- Learn about [Concepts](/getting-started/concepts/) (modes, graders, fixtures, gates)
+- Explore [Graders](/guides/graders/) for scoring strategies
+- Set up [CI Integration](/guides/ci-integration/) for automated quality gates

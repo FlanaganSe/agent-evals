@@ -1,0 +1,83 @@
+---
+title: Core Concepts
+description: Understanding the key concepts in agent-evals
+---
+
+## Terminology
+
+agent-evals uses precise terminology. Understanding these terms makes the documentation and API clearer.
+
+| Term | Definition |
+|------|-----------|
+| **Suite** | A named collection of test cases with a target, graders, and gates |
+| **Case** | A single test input with expected output |
+| **Trial** | One execution of a case (multiple trials enable statistical analysis) |
+| **Run** | A complete execution of a suite — all trials, all grades, all metadata |
+| **Grader** | A function that scores a target's output against expected values |
+| **Gate** | A threshold that determines if a run passes or fails (e.g., 90% pass rate) |
+| **Fixture** | A recorded target response for replay without API calls |
+
+## Execution Modes
+
+### Live mode (default)
+
+Calls your target function for every case. Use this for initial recording and when you need fresh responses.
+
+```bash
+agent-evals run --mode=live --suite=smoke
+```
+
+### Replay mode
+
+Loads pre-recorded fixtures instead of calling the target. Instant, deterministic, zero cost.
+
+```bash
+agent-evals run --mode=replay --suite=smoke
+```
+
+### Judge-only mode
+
+Re-grades a previous run with updated graders. Useful when tuning LLM judge prompts.
+
+```bash
+agent-evals run --mode=judge-only --run-id=<previous-run-id> --suite=smoke
+```
+
+## Graders
+
+Graders are pure functions that score outputs. agent-evals ships 18 built-in graders in two categories:
+
+### Deterministic graders
+Fast, free, reproducible. Examples: `exact-match`, `contains`, `regex`, `json-schema`, `latency`, `cost`.
+
+### LLM graders
+Use an LLM to judge quality. Examples: `llm-rubric`, `factuality`, `llm-classify`. These require a judge configuration.
+
+Graders can be composed: apply multiple graders per case, weight their scores, and set pass thresholds.
+
+## Gates
+
+Gates are quality thresholds that make eval runs actionable:
+
+```typescript
+gates: {
+  minPassRate: 0.9,       // 90% of cases must pass
+  maxFailCount: 2,        // At most 2 failures allowed
+  requireCategories: {
+    "critical": 1.0,      // Critical cases must all pass
+  },
+}
+```
+
+Gates are checked after all grading completes. A failed gate means the run's `gateResult.pass` is `false` — useful for CI pipelines.
+
+## Record-Replay (Fixtures)
+
+The record-replay engine is the core differentiator:
+
+1. **Record**: Run in live mode with `--record` to capture target responses as fixtures
+2. **Replay**: Run in replay mode to grade from fixtures — no API calls, instant results
+3. **Invalidation**: Fixtures are keyed by a config hash. When your suite name or target version changes, fixtures are automatically invalidated
+4. **Staleness**: Fixtures older than the configured TTL generate warnings (or errors with `--strict-fixtures`)
+
+This enables **$0 pre-push evals** — record once, replay thousands of times during development.

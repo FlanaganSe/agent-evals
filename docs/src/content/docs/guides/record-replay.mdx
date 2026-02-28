@@ -1,0 +1,90 @@
+---
+title: Record & Replay
+description: Deep dive on the fixture-based record-replay engine
+---
+
+## Overview
+
+The record-replay engine captures your target's responses as fixtures and replays them for instant, zero-cost eval runs. This is the core differentiator of agent-evals.
+
+## Recording fixtures
+
+```bash
+agent-evals run --mode=live --record --suite=smoke
+```
+
+This calls your target for each case and saves the response to `.eval-fixtures/smoke/<case-id>.jsonl`.
+
+## Replaying from fixtures
+
+```bash
+agent-evals run --mode=replay --suite=smoke
+```
+
+In replay mode, the target function is never called. Responses are loaded from fixtures and graded.
+
+## Fixture format
+
+Each fixture is a JSONL file with two lines:
+
+1. **Meta line**: Config hash, framework version, timestamps
+2. **Data line**: The recorded `TargetOutput`
+
+```jsonl
+{"configHash":"abc123","frameworkVersion":"0.0.1","recordedAt":"2026-02-28T12:00:00.000Z"}
+{"text":"Agent response","latencyMs":150,"toolCalls":[]}
+```
+
+Keys are sorted deterministically for clean git diffs.
+
+## Config hash invalidation
+
+Fixtures are keyed by a config hash computed from the suite name and `targetVersion`. When either changes, fixtures are automatically invalidated:
+
+```typescript
+suites: {
+  smoke: {
+    targetVersion: "v2.0.0", // Changing this invalidates fixtures
+    // ...
+  },
+}
+```
+
+## Staleness
+
+Fixtures have a configurable TTL (default: 30 days). Stale fixtures generate warnings:
+
+```typescript
+replay: {
+  ttlDays: 14, // Warn after 14 days
+}
+```
+
+Use `--strict-fixtures` to fail on stale fixtures instead of warning.
+
+## Re-recording
+
+```bash
+# Re-record all fixtures
+agent-evals run --update-fixtures --suite=smoke
+
+# Equivalent to:
+agent-evals run --mode=live --record --suite=smoke
+```
+
+## Stripping raw responses
+
+To reduce fixture size, strip the `raw` field:
+
+```typescript
+replay: {
+  stripRaw: true,
+}
+```
+
+## Best practices
+
+- Commit `.eval-fixtures/` to git for reproducible CI
+- Add `.eval-fixtures/**/*.jsonl linguist-generated` to `.gitattributes` (auto-generated)
+- Use `targetVersion` to control when fixtures are invalidated
+- Re-record periodically to catch API behavior changes
