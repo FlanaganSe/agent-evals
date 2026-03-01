@@ -17,19 +17,77 @@ pnpm add @modelcontextprotocol/sdk
 
 ### 2. Configure your AI assistant
 
-Add to your assistant's MCP configuration (e.g., `.claude/settings.json` for Claude Code):
+Add the server to your editor's MCP configuration. The command is the same everywhere — only the config file location and format differ.
 
-```json
-{
-  "mcpServers": {
-    "agent-eval-kit": {
-      "command": "npx",
-      "args": ["agent-eval-kit", "mcp"],
-      "cwd": "/path/to/your/project"
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+<Tabs>
+  <TabItem label="Claude Code">
+    Add to `.claude/settings.json` (project-level) or `~/.claude/settings.json` (global):
+
+    ```json
+    {
+      "mcpServers": {
+        "agent-eval-kit": {
+          "command": "npx",
+          "args": ["agent-eval-kit", "mcp"]
+        }
+      }
     }
-  }
-}
-```
+    ```
+
+    Claude Code spawns the server from the project root automatically.
+  </TabItem>
+  <TabItem label="Cursor">
+    Add to `.cursor/mcp.json` in the project root:
+
+    ```json
+    {
+      "mcpServers": {
+        "agent-eval-kit": {
+          "command": "npx",
+          "args": ["agent-eval-kit", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="VS Code">
+    Add to `.vscode/settings.json`:
+
+    ```json
+    {
+      "mcp": {
+        "servers": {
+          "agent-eval-kit": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["agent-eval-kit", "mcp"]
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Windsurf">
+    Add to `~/.codeium/windsurf/mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "agent-eval-kit": {
+          "command": "npx",
+          "args": ["agent-eval-kit", "mcp"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+:::tip
+If agent-eval-kit is installed locally (`pnpm add -D agent-eval-kit`), `npx` resolves to the local binary with no network lookup.
+:::
 
 ### 3. Start using
 
