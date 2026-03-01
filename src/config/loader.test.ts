@@ -97,6 +97,73 @@ export default {
 		expect(config.suites[0]?.cases).toHaveLength(2);
 	});
 
+	it("throws on duplicate case IDs across multiple files in a suite", async () => {
+		const casesDir = join(tempDir, "cases");
+		await mkdir(casesDir, { recursive: true });
+		await writeFile(
+			join(casesDir, "a.jsonl"),
+			JSON.stringify({ id: "H01", input: { query: "hello" } }),
+		);
+		await writeFile(
+			join(casesDir, "b.jsonl"),
+			JSON.stringify({ id: "H01", input: { query: "world" } }),
+		);
+
+		const configContent = `
+export default {
+	suites: [{
+		name: "smoke",
+		target: async () => ({ text: "ok", latencyMs: 0 }),
+		cases: ["cases/a.jsonl", "cases/b.jsonl"],
+	}],
+}
+`;
+		await writeFile(join(tempDir, "eval.config.ts"), configContent);
+
+		await expect(loadConfig({ cwd: tempDir })).rejects.toThrow(/duplicate case id.*H01/i);
+	});
+
+	it("throws on duplicate case IDs between inline and file cases", async () => {
+		const casesDir = join(tempDir, "cases");
+		await mkdir(casesDir, { recursive: true });
+		await writeFile(
+			join(casesDir, "a.jsonl"),
+			JSON.stringify({ id: "H01", input: { query: "from file" } }),
+		);
+
+		const configContent = `
+export default {
+	suites: [{
+		name: "smoke",
+		target: async () => ({ text: "ok", latencyMs: 0 }),
+		cases: [
+			{ id: "H01", input: { query: "inline" } },
+			"cases/a.jsonl",
+		],
+	}],
+}
+`;
+		await writeFile(join(tempDir, "eval.config.ts"), configContent);
+
+		await expect(loadConfig({ cwd: tempDir })).rejects.toThrow(/duplicate case id.*H01/i);
+	});
+
+	it("throws on config with fixtureDir escaping project root", async () => {
+		const configContent = `
+export default {
+	suites: [{
+		name: "smoke",
+		target: async () => ({ text: "ok", latencyMs: 0 }),
+		cases: [{ id: "H01", input: {} }],
+	}],
+	fixtureDir: "../../etc",
+}
+`;
+		await writeFile(join(tempDir, "eval.config.ts"), configContent);
+
+		await expect(loadConfig({ cwd: tempDir })).rejects.toThrow(/resolves outside/);
+	});
+
 	it("throws on config with missing target", async () => {
 		const configContent = `
 export default {

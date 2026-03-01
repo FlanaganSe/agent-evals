@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
+import { assertSafeFixtureDir } from "../cli/resolve-fixture-dir.js";
 import type { EvalPlugin } from "../plugin/types.js";
 import { loadCases } from "./case-loader.js";
 import type {
@@ -50,6 +51,9 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 	validateConfigShape(raw);
 	const config = raw;
 
+	const fixtureDir = config.fixtureDir ?? ".eval-fixtures";
+	assertSafeFixtureDir(fixtureDir, basePath);
+
 	const resolvedSuites = await resolveSuites(config.suites, basePath);
 	const plugins = config.plugins ?? [];
 	validatePlugins(plugins);
@@ -64,7 +68,7 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 		judge: config.judge,
 		plugins,
 		reporters: config.reporters ?? [],
-		fixtureDir: config.fixtureDir ?? ".eval-fixtures",
+		fixtureDir,
 	};
 }
 
@@ -158,7 +162,7 @@ async function resolveCases(
 	cases: readonly (Case | string)[] | string,
 	basePath: string,
 ): Promise<readonly Case[]> {
-	// Single file path — load all cases from it
+	// Single file path — load all cases from it (per-file dedup already handled by loadCases)
 	if (typeof cases === "string") {
 		return loadCases(resolve(basePath, cases));
 	}
@@ -173,6 +177,18 @@ async function resolveCases(
 			result.push(entry);
 		}
 	}
+
+	// Cross-source duplicate check (loadCases only checks within a single file)
+	const seenIds = new Set<string>();
+	for (const c of result) {
+		if (seenIds.has(c.id)) {
+			throw new Error(
+				`Duplicate case ID "${c.id}" across case sources. Case IDs must be unique within a suite.`,
+			);
+		}
+		seenIds.add(c.id);
+	}
+
 	return result;
 }
 

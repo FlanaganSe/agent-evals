@@ -420,6 +420,9 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 	// Initial run
 	await runOnce(args, logger);
 
+	let isRunning = false;
+	let pendingRerun = false;
+
 	watcher.on("change", async (files) => {
 		const relevantFiles = files.filter(
 			(f) =>
@@ -431,16 +434,37 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 		);
 		if (relevantFiles.length === 0) return;
 
-		const shortNames = relevantFiles.map((f) => f.replace(`${cwd}/`, ""));
-		logger.info(`\n[watch] Change detected: ${shortNames.join(", ")}`);
-
-		// Clear terminal for clean output
-		if (process.stdout.isTTY) {
-			process.stdout.write("\x1bc");
+		if (isRunning) {
+			pendingRerun = true;
+			return;
 		}
 
-		await runOnce(args, logger);
-		logger.info("\n[watch] Watching for changes...");
+		isRunning = true;
+		try {
+			const shortNames = relevantFiles.map((f) => f.replace(`${cwd}/`, ""));
+			logger.info(`\n[watch] Change detected: ${shortNames.join(", ")}`);
+
+			// Clear terminal for clean output
+			if (process.stdout.isTTY) {
+				process.stdout.write("\x1bc");
+			}
+
+			await runOnce(args, logger);
+			logger.info("\n[watch] Watching for changes...");
+
+			// If changes arrived during the run, re-run once more
+			while (pendingRerun) {
+				pendingRerun = false;
+				logger.info("\n[watch] Changes detected during run, re-running...");
+				if (process.stdout.isTTY) {
+					process.stdout.write("\x1bc");
+				}
+				await runOnce(args, logger);
+				logger.info("\n[watch] Watching for changes...");
+			}
+		} finally {
+			isRunning = false;
+		}
 	});
 
 	// Wait for Ctrl+C
