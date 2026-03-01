@@ -9,6 +9,7 @@ import {
 	fixtureStats,
 	listFixtures,
 	readFixture,
+	sanitizeName,
 	sortKeysDeep,
 	writeFixture,
 } from "./fixture-store.js";
@@ -88,7 +89,7 @@ describe("writeFixture + readFixture", () => {
 describe("fixture format", () => {
 	it("writes JSONL with meta on first line and data on second", async () => {
 		await writeFixture("suite-a", "H01", sampleOutput, "abc123", opts);
-		const filePath = join(tempDir, "suite-a", "H01.jsonl");
+		const filePath = join(tempDir, sanitizeName("suite-a"), `${sanitizeName("H01")}.jsonl`);
 		const content = await readFile(filePath, "utf8");
 		const lines = content.split("\n").filter(Boolean);
 
@@ -112,7 +113,7 @@ describe("fixture format", () => {
 			tokenUsage: { output: 200, input: 100 },
 		};
 		await writeFixture("suite-a", "H01", output, "abc123", opts);
-		const filePath = join(tempDir, "suite-a", "H01.jsonl");
+		const filePath = join(tempDir, sanitizeName("suite-a"), `${sanitizeName("H01")}.jsonl`);
 		const content = await readFile(filePath, "utf8");
 		const lines = content.split("\n").filter(Boolean);
 		const dataLine = lines[1] as string;
@@ -130,7 +131,7 @@ describe("fixture format", () => {
 		};
 		await writeFixture("suite-a", "H01", outputWithRaw, "abc123", opts);
 
-		const filePath = join(tempDir, "suite-a", "H01.jsonl");
+		const filePath = join(tempDir, sanitizeName("suite-a"), `${sanitizeName("H01")}.jsonl`);
 		const content = await readFile(filePath, "utf8");
 		expect(content).not.toContain("raw");
 	});
@@ -143,14 +144,14 @@ describe("fixture format", () => {
 		const noStripOpts = { ...opts, stripRaw: false };
 		await writeFixture("suite-a", "H01", outputWithRaw, "abc123", noStripOpts);
 
-		const filePath = join(tempDir, "suite-a", "H01.jsonl");
+		const filePath = join(tempDir, sanitizeName("suite-a"), `${sanitizeName("H01")}.jsonl`);
 		const content = await readFile(filePath, "utf8");
 		expect(content).toContain("chunks");
 	});
 
 	it("idempotent writes produce identical files", async () => {
 		await writeFixture("suite-a", "H01", sampleOutput, "abc123", opts);
-		const filePath = join(tempDir, "suite-a", "H01.jsonl");
+		const filePath = join(tempDir, sanitizeName("suite-a"), `${sanitizeName("H01")}.jsonl`);
 		const content1 = await readFile(filePath, "utf8");
 
 		await writeFixture("suite-a", "H01", sampleOutput, "abc123", opts);
@@ -166,7 +167,11 @@ describe("fixture format", () => {
 describe("directory handling", () => {
 	it("auto-creates nested directories", async () => {
 		await writeFixture("deep/nested/suite", "H01", sampleOutput, "abc123", opts);
-		const filePath = join(tempDir, "deep-nested-suite", "H01.jsonl");
+		const filePath = join(
+			tempDir,
+			sanitizeName("deep/nested/suite"),
+			`${sanitizeName("H01")}.jsonl`,
+		);
 		const fileStat = await stat(filePath);
 		expect(fileStat.isFile()).toBe(true);
 	});
@@ -190,7 +195,9 @@ describe("listFixtures", () => {
 
 		const result = await listFixtures("suite-a", { baseDir: tempDir });
 		expect(result).toHaveLength(2);
-		expect(result.map((f) => f.caseId).sort()).toEqual(["H01", "H02"]);
+		expect(result.map((f) => f.caseId).sort()).toEqual(
+			[sanitizeName("H01"), sanitizeName("H02")].sort(),
+		);
 	});
 });
 
@@ -251,6 +258,35 @@ describe("sortKeysDeep", () => {
 		expect(sortKeysDeep(null)).toBe(null);
 		expect(sortKeysDeep(42)).toBe(42);
 		expect(sortKeysDeep("hello")).toBe("hello");
+	});
+});
+
+describe("sanitizeName collision resistance", () => {
+	it("produces distinct names for IDs that differ only by special characters", () => {
+		const a = sanitizeName("What is 2+2?");
+		const b = sanitizeName("What is 2-2?");
+		const c = sanitizeName("What is 2*2?");
+		expect(a).not.toBe(b);
+		expect(a).not.toBe(c);
+		expect(b).not.toBe(c);
+	});
+
+	it("round-trips fixtures with colliding slugs", async () => {
+		const outputA: TargetOutput = { text: "four", latencyMs: 0 };
+		const outputB: TargetOutput = { text: "zero", latencyMs: 0 };
+
+		await writeFixture("suite", "What is 2+2?", outputA, "hash", opts);
+		await writeFixture("suite", "What is 2-2?", outputB, "hash", opts);
+
+		const resultA = await readFixture("suite", "What is 2+2?", "hash", opts);
+		const resultB = await readFixture("suite", "What is 2-2?", "hash", opts);
+
+		expect(resultA.status).toBe("hit");
+		expect(resultB.status).toBe("hit");
+		if (resultA.status === "hit" && resultB.status === "hit") {
+			expect(resultA.output.text).toBe("four");
+			expect(resultB.output.text).toBe("zero");
+		}
 	});
 });
 

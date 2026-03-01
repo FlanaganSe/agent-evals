@@ -21,6 +21,6 @@ export const globalArgs = {
 	config: {
 		type: "string" as const,
 		alias: "c",
-		description: "Path to config file or directory",
+		description: "Path to config file (e.g. custom.config.ts) or directory",
 	},
 } satisfies ArgsDef;

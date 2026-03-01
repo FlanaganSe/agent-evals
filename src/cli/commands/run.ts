@@ -1,5 +1,5 @@
 import { appendFile, stat } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { defineCommand } from "citty";
 import { loadConfig, type ValidatedConfig } from "../../config/loader.js";
@@ -105,13 +105,22 @@ export function buildRunOptions(
 	};
 }
 
-async function resolveConfigDir(configPath?: string): Promise<string | undefined> {
-	if (!configPath) return undefined;
-	const resolved = resolve(configPath);
+interface ResolvedConfigPath {
+	readonly cwd: string;
+	readonly configPath?: string | undefined;
+}
+
+async function resolveConfigInput(configArg?: string): Promise<ResolvedConfigPath | undefined> {
+	if (!configArg) return undefined;
+	const resolved = resolve(configArg);
 	const s = await stat(resolved).catch(() => null);
-	if (s?.isFile()) return dirname(resolved);
-	if (s?.isDirectory()) return resolved;
-	return resolved;
+	if (s?.isFile()) {
+		const name = basename(resolved);
+		const stem = name.replace(/\.(ts|mts|js|mjs)$/, "");
+		return { cwd: dirname(resolved), configPath: stem };
+	}
+	if (s?.isDirectory()) return { cwd: resolved };
+	return { cwd: resolved };
 }
 
 // ─── Core execution logic (shared with record command) ──────────────────────
@@ -305,10 +314,10 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 	process.exit(worstExitCode);
 }
 
-async function loadConfigSafe(configPath: string | undefined): Promise<ValidatedConfig> {
+async function loadConfigSafe(configArg: string | undefined): Promise<ValidatedConfig> {
 	try {
-		const cwd = await resolveConfigDir(configPath);
-		return await loadConfig({ cwd });
+		const resolved = await resolveConfigInput(configArg);
+		return await loadConfig(resolved);
 	} catch (err) {
 		throw new ConfigError(
 			`Failed to load config: ${err instanceof Error ? err.message : String(err)}`,
@@ -398,9 +407,10 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 	const cwd = process.cwd();
 	const watchPaths = [cwd];
 
-	const watcher = await createFileWatcher({
+	const watcher = createFileWatcher({
 		paths: watchPaths,
 		debounceMs: 300,
+		onError: (err, path) => logger.warn(`[watch] Watcher error on ${path}: ${String(err)}`),
 	});
 
 	logger.info("[watch] Watching for changes... (press Ctrl+C to stop)");

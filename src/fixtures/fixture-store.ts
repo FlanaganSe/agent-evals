@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { TargetOutput } from "../config/types.js";
@@ -263,13 +264,15 @@ function stableStringify(obj: unknown): string {
 	return JSON.stringify(sortKeysDeep(obj));
 }
 
-/** Sanitize a name for use as a directory/file name. */
-function sanitizeName(name: string): string {
-	return name
+/** Sanitize a name for use as a directory/file name. Appends a short hash to prevent collisions from lossy character replacement. */
+export function sanitizeName(name: string): string {
+	const slug = name
 		.replace(/[^a-zA-Z0-9_-]/g, "-")
 		.replace(/-+/g, "-")
 		.replace(/^-|-$/g, "")
 		.slice(0, 100);
+	const hash = createHash("sha256").update(name).digest("hex").slice(0, 8);
+	return slug ? `${slug}-${hash}` : hash;
 }
 
 /** Ensure .gitattributes exists in the fixture base directory. */
