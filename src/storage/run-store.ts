@@ -5,6 +5,14 @@ import type { Run, RunMeta } from "../config/types.js";
 
 const DEFAULT_DIR = ".eval-runs";
 
+const SAFE_ID = /^[a-zA-Z0-9_-]+$/;
+
+function validateRunId(runId: string): void {
+	if (!SAFE_ID.test(runId)) {
+		throw new Error(`Invalid run ID: ${runId}`);
+	}
+}
+
 /**
  * Persists a Run artifact to disk as JSON.
  * Returns the file path.
@@ -24,6 +32,7 @@ export async function saveRun(run: Run, baseDir?: string): Promise<string> {
  * Loads a Run artifact from disk and validates against RunSchema.
  */
 export async function loadRun(runId: string, baseDir?: string): Promise<Run> {
+	validateRunId(runId);
 	const dir = baseDir ?? DEFAULT_DIR;
 	const filePath = join(dir, `${runId}.json`);
 

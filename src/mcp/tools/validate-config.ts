@@ -1,5 +1,6 @@
+import { resolve } from "node:path";
 import { loadConfig } from "../../config/loader.js";
-import { type ToolResult, textResult } from "./types.js";
+import { errorResult, type ToolResult, textResult } from "./types.js";
 
 export interface ValidateConfigArgs {
 	readonly configPath?: string | undefined;
@@ -10,6 +11,13 @@ export async function handleValidateConfig(
 	cwd: string,
 ): Promise<ToolResult> {
 	try {
+		if (args.configPath) {
+			const resolved = resolve(cwd, args.configPath);
+			if (!resolved.startsWith(`${cwd}/`) && resolved !== cwd) {
+				return errorResult("configPath must resolve within the project directory");
+			}
+		}
+
 		const config = await loadConfig({
 			cwd,
 			configPath: args.configPath,

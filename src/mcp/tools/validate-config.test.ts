@@ -108,4 +108,16 @@ describe("handleValidateConfig", () => {
 
 		expect(data.valid).toBe(true);
 	});
+
+	it("rejects configPath that escapes cwd via relative traversal", async () => {
+		const result = await handleValidateConfig({ configPath: "../../etc/evil" }, "/tmp/project");
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toContain("within the project directory");
+	});
+
+	it("rejects configPath that is an absolute path outside cwd", async () => {
+		const result = await handleValidateConfig({ configPath: "/etc/evil" }, "/tmp/project");
+		expect(result.isError).toBe(true);
+		expect(result.content[0]?.text).toContain("within the project directory");
+	});
 });

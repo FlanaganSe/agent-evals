@@ -64,6 +64,14 @@ describe("loadRun", () => {
 	it("throws on nonexistent run", async () => {
 		await expect(loadRun("nonexistent", tempDir)).rejects.toThrow(/not found/i);
 	});
+
+	it("rejects path traversal in runId", async () => {
+		await expect(loadRun("../../etc/passwd", tempDir)).rejects.toThrow(/invalid run id/i);
+	});
+
+	it("rejects runId with slashes", async () => {
+		await expect(loadRun("foo/bar", tempDir)).rejects.toThrow(/invalid run id/i);
+	});
 });
 
 describe("listRuns", () => {

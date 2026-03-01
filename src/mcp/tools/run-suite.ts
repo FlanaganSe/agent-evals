@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { loadConfig } from "../../config/loader.js";
 import type { FixtureOptions } from "../../config/types.js";
 import { computeFixtureConfigHash } from "../../fixtures/config-hash.js";
@@ -50,7 +51,7 @@ export async function handleRunSuite(args: RunSuiteArgs, cwd: string): Promise<T
 		});
 
 		// Persist run so list-runs and get-run-details can find it
-		await saveRun(run);
+		await saveRun(run, join(cwd, ".eval-runs"));
 
 		const report = formatConsoleReport(run, { color: false });
 		return textResult(report);

@@ -40,13 +40,15 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 	const basePath = options?.cwd ?? process.cwd();
 
 	const configPath = await resolveConfigFile(configFile, basePath);
-	const config = configPath ? await importConfig(configPath) : undefined;
+	const raw = configPath ? await importConfig(configPath) : undefined;
 
-	if (!config || !config.suites || config.suites.length === 0) {
+	if (!raw) {
 		throw new Error(
 			"No eval.config.ts found or config has no suites. Run 'agent-eval-kit init' to create one.",
 		);
 	}
+	validateConfigShape(raw);
+	const config = raw;
 
 	const resolvedSuites = await resolveSuites(config.suites, basePath);
 	const plugins = config.plugins ?? [];
@@ -83,8 +85,48 @@ async function resolveConfigFile(stem: string, basePath: string): Promise<string
 
 async function importConfig(filePath: string): Promise<EvalConfig | undefined> {
 	const jiti = createJiti(import.meta.url, { interopDefault: true });
-	const mod = (await jiti.import(filePath)) as EvalConfig | undefined;
-	return mod;
+	try {
+		const mod = (await jiti.import(filePath)) as EvalConfig | undefined;
+		return mod;
+	} catch (error) {
+		throw new Error(
+			`Failed to load config from ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
+function validateConfigShape(config: unknown): asserts config is EvalConfig {
+	if (!config || typeof config !== "object") {
+		throw new Error("Config file must export an object. Run 'agent-eval-kit init' to create one.");
+	}
+
+	const cfg = config as Record<string, unknown>;
+
+	if (!Array.isArray(cfg.suites) || cfg.suites.length === 0) {
+		throw new Error(
+			"No eval.config.ts found or config has no suites. Run 'agent-eval-kit init' to create one.",
+		);
+	}
+
+	for (let i = 0; i < cfg.suites.length; i++) {
+		const suite = cfg.suites[i] as Record<string, unknown>;
+		if (!suite || typeof suite !== "object") {
+			throw new Error(`suites[${i}]: must be an object`);
+		}
+		if (typeof suite.name !== "string" || suite.name.length === 0) {
+			throw new Error(`suites[${i}]: missing or invalid 'name' (must be a non-empty string)`);
+		}
+		if (typeof suite.target !== "function") {
+			throw new Error(
+				`suites[${i}] ("${suite.name}"): missing or invalid 'target' (must be a function)`,
+			);
+		}
+		if (!Array.isArray(suite.cases) && typeof suite.cases !== "string") {
+			throw new Error(
+				`suites[${i}] ("${suite.name}"): 'cases' must be an array or a file path string`,
+			);
+		}
+	}
 }
 
 function validatePlugins(plugins: readonly EvalPlugin[]): void {

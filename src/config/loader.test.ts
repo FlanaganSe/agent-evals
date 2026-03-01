@@ -97,6 +97,48 @@ export default {
 		expect(config.suites[0]?.cases).toHaveLength(2);
 	});
 
+	it("throws on config with missing target", async () => {
+		const configContent = `
+export default {
+	suites: [{
+		name: "smoke",
+		cases: [{ id: "H01", input: {} }],
+	}],
+}
+`;
+		await writeFile(join(tempDir, "eval.config.ts"), configContent);
+
+		await expect(loadConfig({ cwd: tempDir })).rejects.toThrow(/target.*must be a function/i);
+	});
+
+	it("throws on config with invalid cases", async () => {
+		const configContent = `
+export default {
+	suites: [{
+		name: "smoke",
+		target: async () => ({ text: "ok", latencyMs: 0 }),
+		cases: null,
+	}],
+}
+`;
+		await writeFile(join(tempDir, "eval.config.ts"), configContent);
+
+		await expect(loadConfig({ cwd: tempDir })).rejects.toThrow(
+			/cases.*must be an array or a file path/i,
+		);
+	});
+
+	it("throws on config with non-object suite", async () => {
+		const configContent = `
+export default {
+	suites: ["not an object"],
+}
+`;
+		await writeFile(join(tempDir, "eval.config.ts"), configContent);
+
+		await expect(loadConfig({ cwd: tempDir })).rejects.toThrow(/must be an object/i);
+	});
+
 	it("throws on missing config", async () => {
 		const emptyDir = await mkdtemp(join(tmpdir(), "empty-"));
 		try {

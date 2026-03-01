@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { compareRuns } from "../../comparison/compare.js";
 import { formatComparisonReport } from "../../comparison/format.js";
 import { loadRun } from "../../storage/run-store.js";
@@ -8,10 +9,11 @@ export interface CompareRunsArgs {
 	readonly compareRunId: string;
 }
 
-export async function handleCompareRuns(args: CompareRunsArgs, _cwd: string): Promise<ToolResult> {
+export async function handleCompareRuns(args: CompareRunsArgs, cwd: string): Promise<ToolResult> {
 	try {
-		const base = await loadRun(args.baseRunId);
-		const compare = await loadRun(args.compareRunId);
+		const runDir = join(cwd, ".eval-runs");
+		const base = await loadRun(args.baseRunId, runDir);
+		const compare = await loadRun(args.compareRunId, runDir);
 		const comparison = compareRuns(base, compare);
 		const report = formatComparisonReport(comparison, { color: false });
 		return textResult(report);
