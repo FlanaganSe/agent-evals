@@ -3,9 +3,8 @@ import { defineCommand } from "citty";
 import { clearFixtures } from "../../fixtures/fixture-store.js";
 import { clearJudgeCache } from "../../graders/llm/judge-disk-cache.js";
 import { createLogger } from "../logger.js";
+import { assertSafeFixtureDir, resolveFixtureDir } from "../resolve-fixture-dir.js";
 import { globalArgs } from "../shared-args.js";
-
-const DEFAULT_FIXTURE_DIR = ".eval-fixtures";
 
 // biome-ignore lint/style/noDefaultExport: citty subcommands require default exports
 export default defineCommand({
@@ -39,7 +38,8 @@ export default defineCommand({
 
 		if (args.judge && !args.all) return;
 
-		const fixtureDir = DEFAULT_FIXTURE_DIR;
+		const fixtureDir = await resolveFixtureDir();
+		assertSafeFixtureDir(fixtureDir, process.cwd());
 
 		const exists = await stat(fixtureDir).catch(() => null);
 		if (!exists) {

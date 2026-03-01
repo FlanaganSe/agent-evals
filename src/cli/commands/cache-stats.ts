@@ -1,9 +1,8 @@
 import { defineCommand } from "citty";
 import { fixtureStats } from "../../fixtures/fixture-store.js";
 import { judgeCacheStats } from "../../graders/llm/judge-disk-cache.js";
+import { resolveFixtureDir } from "../resolve-fixture-dir.js";
 import { globalArgs } from "../shared-args.js";
-
-const DEFAULT_FIXTURE_DIR = ".eval-fixtures";
 
 // biome-ignore lint/style/noDefaultExport: citty subcommands require default exports
 export default defineCommand({
@@ -11,7 +10,8 @@ export default defineCommand({
 	args: globalArgs,
 	async run() {
 		// Fixture stats
-		const fStats = await fixtureStats({ baseDir: DEFAULT_FIXTURE_DIR });
+		const fixtureDir = await resolveFixtureDir();
+		const fStats = await fixtureStats({ baseDir: fixtureDir });
 
 		const lines = ["Cache Stats", ""];
 		lines.push("Fixtures:");

@@ -37,7 +37,9 @@ export async function runSuite(suite: ResolvedSuite, options: RunOptions): Promi
 		return runSuiteJudgeOnly(suite, options);
 	}
 
-	const dispatcher = createHookDispatcher(options.plugins ?? []);
+	const dispatcher = createHookDispatcher(options.plugins ?? [], {
+		warn: (msg) => process.stderr.write(`${msg}\n`),
+	});
 	const runId = randomUUID();
 	const startTime = Date.now();
 	const trialCount = options.trials ?? 1;
