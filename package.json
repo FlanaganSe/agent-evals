@@ -13,7 +13,7 @@
 	},
 	"type": "module",
 	"engines": {
-		"node": ">=20.0.0"
+		"node": ">=20.16.0"
 	},
 	"bin": {
 		"agent-eval-kit": "./bin/cli.mjs"
@@ -79,7 +79,6 @@
 	"license": "MIT",
 	"dependencies": {
 		"@clack/prompts": "^1.0.1",
-		"chokidar": "^4.0.3",
 		"citty": "^0.2.1",
 		"jiti": "^2.6.1",
 		"picocolors": "^1.1.1",

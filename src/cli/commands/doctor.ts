@@ -19,9 +19,9 @@ export function checkNodeVersion(): CheckResult {
 	const version = process.versions.node;
 	const major = Number.parseInt(version.split(".")[0] ?? "0", 10);
 	if (major >= 20) {
-		return { status: "pass", message: `Node.js v${version} (>= 20.0.0 required)` };
+		return { status: "pass", message: `Node.js v${version} (>= 20.16.0 required)` };
 	}
-	return { status: "fail", message: `Node.js v${version} — requires >= 20.0.0` };
+	return { status: "fail", message: `Node.js v${version} — requires >= 20.16.0` };
 }
 
 export async function checkConfig(cwd?: string): Promise<CheckResult> {
