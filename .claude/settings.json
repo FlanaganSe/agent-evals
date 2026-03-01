@@ -10,11 +10,11 @@
       "Bash(npx vitest *)",
       "Bash(git status)",
       "Bash(git diff *)",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Edit",
+      "Write"
     ],
     "ask": [
-      "Edit",
-      "Write",
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(curl *)"
