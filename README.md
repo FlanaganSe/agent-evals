@@ -8,7 +8,7 @@ TypeScript-native evaluation framework for AI agent workflows.
 
 Record agent responses, grade them with deterministic checks or LLM-as-judge rubrics, enforce quality gates in CI, and compare runs to catch regressions — all from a single config file.
 
-> **v0.0.1** — API is not yet stable.
+> **v0.0.2** — API is not yet stable.
 
 **[Documentation](https://flanaganse.github.io/agent-eval-kit/)** · **[GitHub](https://github.com/FlanaganSe/agent-eval-kit)**
 
