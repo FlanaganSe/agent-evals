@@ -101,7 +101,7 @@ The record-replay engine is the core differentiator:
 
 1. **Record**: Run in live mode with `--record` to capture target responses as fixtures
 2. **Replay**: Run in replay mode to grade from fixtures — no API calls, instant results
-3. **Invalidation**: Fixtures are keyed by a config hash. When your suite name or case count changes, fixtures are automatically invalidated
+3. **Invalidation**: Fixtures are keyed by a config hash of the suite name and `targetVersion`. Bump `targetVersion` when your target's behavior changes
 4. **Staleness**: Fixtures older than the configured TTL (default: 14 days) generate warnings (or errors with `--strict-fixtures`)
 
 This enables **$0 pre-push evals** — record once, replay thousands of times during development.
