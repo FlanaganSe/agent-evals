@@ -222,16 +222,18 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 				}
 			}
 
-			if (process.stdout.isTTY && !args["auto-approve"]) {
-				const shouldContinue = await confirmPrompt("Proceed with this run?");
-				if (!shouldContinue) {
-					logger.info("Run cancelled.");
-					process.exit(0);
+			if (!args["auto-approve"]) {
+				if (process.stdout.isTTY) {
+					const shouldContinue = await confirmPrompt("Proceed with this run?");
+					if (!shouldContinue) {
+						logger.info("Run cancelled.");
+						process.exit(0);
+					}
+				} else {
+					throw new ConfigError(
+						"--confirm-cost requires interactive TTY or --auto-approve in non-interactive environments.",
+					);
 				}
-			} else if (!args["auto-approve"]) {
-				logger.warn(
-					"Non-interactive environment detected. Use --auto-approve to skip confirmation.",
-				);
 			}
 		}
 

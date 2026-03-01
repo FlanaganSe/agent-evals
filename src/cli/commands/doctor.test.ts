@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkAgentsMd, checkGitHooks, checkNodeVersion } from "./doctor.js";
 
 describe("checkNodeVersion", () => {
-	it("passes for Node >= 20", () => {
+	it("passes for Node >= 20.16.0", () => {
 		const result = checkNodeVersion();
-		// We're running on Node 20+ in this project
+		// We're running on Node 20.16+ in this project
 		expect(result.status).toBe("pass");
-		expect(result.message).toContain("Node.js");
+		expect(result.message).toContain("20.16.0");
 	});
 });
 

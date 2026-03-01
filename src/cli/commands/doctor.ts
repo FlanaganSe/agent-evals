@@ -15,13 +15,29 @@ export type DoctorCheck = () => Promise<CheckResult>;
 
 // ─── Individual checks (exported for testing) ───────────────────────────────
 
+const MINIMUM_NODE_VERSION = [20, 16, 0] as const;
+
 export function checkNodeVersion(): CheckResult {
 	const version = process.versions.node;
-	const major = Number.parseInt(version.split(".")[0] ?? "0", 10);
-	if (major >= 20) {
-		return { status: "pass", message: `Node.js v${version} (>= 20.16.0 required)` };
+	const parts = version.split(".").map((p) => Number.parseInt(p, 10));
+	const [major = 0, minor = 0, patch = 0] = parts;
+	const [reqMajor, reqMinor, reqPatch] = MINIMUM_NODE_VERSION;
+
+	const meetsMinimum =
+		major > reqMajor ||
+		(major === reqMajor && minor > reqMinor) ||
+		(major === reqMajor && minor === reqMinor && patch >= reqPatch);
+
+	if (meetsMinimum) {
+		return {
+			status: "pass",
+			message: `Node.js v${version} (>= ${MINIMUM_NODE_VERSION.join(".")} required)`,
+		};
 	}
-	return { status: "fail", message: `Node.js v${version} — requires >= 20.16.0` };
+	return {
+		status: "fail",
+		message: `Node.js v${version} — requires >= ${MINIMUM_NODE_VERSION.join(".")}`,
+	};
 }
 
 export async function checkConfig(cwd?: string): Promise<CheckResult> {
