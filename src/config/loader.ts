@@ -1,5 +1,6 @@
+import { access } from "node:fs/promises";
 import { resolve } from "node:path";
-import { loadConfig as loadC12Config } from "c12";
+import { createJiti } from "jiti";
 import type { EvalPlugin } from "../plugin/types.js";
 import { loadCases } from "./case-loader.js";
 import type {
@@ -38,11 +39,8 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 	const configFile = options?.configPath ?? "eval.config";
 	const basePath = options?.cwd ?? process.cwd();
 
-	const { config } = await loadC12Config<EvalConfig>({
-		name: "eval",
-		configFile,
-		cwd: basePath,
-	});
+	const configPath = await resolveConfigFile(configFile, basePath);
+	const config = configPath ? await importConfig(configPath) : undefined;
 
 	if (!config || !config.suites || config.suites.length === 0) {
 		throw new Error(
@@ -66,6 +64,27 @@ export async function loadConfig(options?: LoadConfigOptions): Promise<Validated
 		reporters: config.reporters ?? [],
 		fixtureDir: config.fixtureDir ?? ".eval-fixtures",
 	};
+}
+
+const CONFIG_EXTENSIONS = [".ts", ".mts", ".js", ".mjs"] as const;
+
+async function resolveConfigFile(stem: string, basePath: string): Promise<string | undefined> {
+	for (const ext of CONFIG_EXTENSIONS) {
+		const candidate = resolve(basePath, `${stem}${ext}`);
+		try {
+			await access(candidate);
+			return candidate;
+		} catch {
+			// File doesn't exist, try next extension
+		}
+	}
+	return undefined;
+}
+
+async function importConfig(filePath: string): Promise<EvalConfig | undefined> {
+	const jiti = createJiti(import.meta.url, { interopDefault: true });
+	const mod = (await jiti.import(filePath)) as EvalConfig | undefined;
+	return mod;
 }
 
 function validatePlugins(plugins: readonly EvalPlugin[]): void {
