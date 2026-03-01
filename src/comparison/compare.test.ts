@@ -313,7 +313,7 @@ describe("compareRuns", () => {
 			expect(result.cases).toHaveLength(0);
 		});
 
-		it("multi-trial runs → uses first trial per case", () => {
+		it("multi-trial runs without trialStats → uses first trial per case", () => {
 			const base = makeRun("base", [
 				makeTrial("C01", "pass", 1),
 				{ ...makeTrial("C01", "fail", 0), trialIndex: 1 },
@@ -323,8 +323,87 @@ describe("compareRuns", () => {
 			const result = compareRuns(base, compare);
 
 			expect(result.cases).toHaveLength(1);
-			// Uses first trial (pass), not second (fail)
+			// Without trialStats, uses first trial (pass)
 			expect(result.cases[0]?.baseStatus).toBe("pass");
+		});
+
+		it("multi-trial runs with trialStats → uses pass^k aggregate", () => {
+			// Base: case C01 is flaky (trial 0 passes, trial 1 fails) → aggregate = fail
+			const base = makeRun(
+				"base",
+				[makeTrial("C01", "pass", 1), { ...makeTrial("C01", "fail", 0), trialIndex: 1 }],
+				{
+					summary: {
+						totalCases: 1,
+						passed: 0,
+						failed: 1,
+						errors: 0,
+						passRate: 0,
+						totalCost: 0.02,
+						totalDurationMs: 200,
+						p95LatencyMs: 100,
+						gateResult: { pass: false, results: [] },
+						trialStats: {
+							C01: {
+								trialCount: 2,
+								passCount: 1,
+								failCount: 1,
+								errorCount: 0,
+								passRate: 0.5,
+								meanScore: 0.5,
+								scoreStdDev: 0.5,
+								ci95Low: 0.1,
+								ci95High: 0.9,
+								flaky: true,
+							},
+						},
+					},
+				},
+			);
+			// Compare: case C01 passes all trials → aggregate = pass
+			const compare = makeRun(
+				"compare",
+				[makeTrial("C01", "pass", 1), { ...makeTrial("C01", "pass", 0.9), trialIndex: 1 }],
+				{
+					summary: {
+						totalCases: 1,
+						passed: 1,
+						failed: 0,
+						errors: 0,
+						passRate: 1,
+						totalCost: 0.02,
+						totalDurationMs: 200,
+						p95LatencyMs: 100,
+						gateResult: { pass: true, results: [] },
+						trialStats: {
+							C01: {
+								trialCount: 2,
+								passCount: 2,
+								failCount: 0,
+								errorCount: 0,
+								passRate: 1,
+								meanScore: 0.95,
+								scoreStdDev: 0.05,
+								ci95Low: 0.8,
+								ci95High: 1.0,
+								flaky: false,
+							},
+						},
+					},
+				},
+			);
+
+			const result = compareRuns(base, compare);
+
+			expect(result.cases).toHaveLength(1);
+			// With trialStats, base uses aggregate: fail (flaky, not all pass)
+			expect(result.cases[0]?.baseStatus).toBe("fail");
+			// Compare uses aggregate: pass (all pass)
+			expect(result.cases[0]?.compareStatus).toBe("pass");
+			expect(result.cases[0]?.direction).toBe("improvement");
+			// Scores use meanScore from trialStats
+			expect(result.cases[0]?.baseScore).toBeCloseTo(0.5);
+			expect(result.cases[0]?.compareScore).toBeCloseTo(0.95);
 		});
 
 		it("regressions sorted before improvements", () => {

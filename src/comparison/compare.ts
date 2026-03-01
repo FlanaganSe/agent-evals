@@ -1,4 +1,4 @@
-import type { GradeResult, Run, Trial } from "../config/types.js";
+import type { GradeResult, Run, RunSummary, Trial } from "../config/types.js";
 import type {
 	CaseComparison,
 	CategoryComparisonSummary,
@@ -21,12 +21,15 @@ export interface CompareOptions {
  *
  * Only cases present in BOTH runs are compared as changed/unchanged.
  * Cases in only one run are reported as "added" or "removed".
+ *
+ * For multi-trial runs (trialStats present), uses aggregate pass^k
+ * semantics and mean scores instead of raw trial-0 data.
  */
 export function compareRuns(base: Run, compare: Run, options?: CompareOptions): RunComparison {
 	const threshold = options?.scoreThreshold ?? 0.05;
 
-	const baseTrials = buildCaseMap(base.trials);
-	const compareTrials = buildCaseMap(compare.trials);
+	const baseTrials = buildCaseMap(base.trials, base.summary);
+	const compareTrials = buildCaseMap(compare.trials, compare.summary);
 
 	const allCaseIds = new Set([...baseTrials.keys(), ...compareTrials.keys()]);
 
@@ -58,16 +61,59 @@ export function compareRuns(base: Run, compare: Run, options?: CompareOptions): 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 /**
- * Builds a map from caseId to the "representative" trial.
- * For multi-trial runs: uses the first trial per case (consistent ordering from runner sort).
+ * Builds a map from caseId to a representative trial.
+ *
+ * For multi-trial runs (trialStats present): aggregates all trials per case
+ * using pass^k semantics (status) and mean score, consistent with how the
+ * runner computes RunSummary.
+ *
+ * For single-trial runs: uses the trial directly.
  */
-function buildCaseMap(trials: readonly Trial[]): Map<string, Trial> {
+function buildCaseMap(trials: readonly Trial[], summary: RunSummary): Map<string, Trial> {
 	const map = new Map<string, Trial>();
-	for (const trial of trials) {
-		if (!map.has(trial.caseId)) {
-			map.set(trial.caseId, trial);
+
+	if (!summary.trialStats) {
+		for (const trial of trials) {
+			if (!map.has(trial.caseId)) {
+				map.set(trial.caseId, trial);
+			}
 		}
+		return map;
 	}
+
+	// Multi-trial: group trials by caseId, then aggregate
+	const grouped = new Map<string, Trial[]>();
+	for (const trial of trials) {
+		let group = grouped.get(trial.caseId);
+		if (!group) {
+			group = [];
+			grouped.set(trial.caseId, group);
+		}
+		group.push(trial);
+	}
+
+	for (const [caseId, caseTrials] of grouped) {
+		const stats = summary.trialStats[caseId];
+		const first = caseTrials[0];
+		if (!first) continue;
+
+		// pass^k: pass only if all trials pass; error only if all error; else fail
+		const aggregateStatus: "pass" | "fail" | "error" =
+			stats && stats.passCount === stats.trialCount
+				? "pass"
+				: stats && stats.errorCount === stats.trialCount
+					? "error"
+					: "fail";
+
+		const aggregateScore = stats?.meanScore ?? first.score;
+
+		map.set(caseId, {
+			...first,
+			status: aggregateStatus,
+			score: aggregateScore,
+		});
+	}
+
 	return map;
 }
 
