@@ -1,5 +1,9 @@
 # agent-eval-kit
 
+[![npm](https://img.shields.io/npm/v/agent-eval-kit)](https://www.npmjs.com/package/agent-eval-kit)
+[![tests](https://img.shields.io/badge/tests-676%20passed-brightgreen)](https://github.com/FlanaganSe/agent-eval-kit)
+[![license](https://img.shields.io/npm/l/agent-eval-kit)](LICENSE.md)
+
 TypeScript-native evaluation framework for AI agent workflows.
 
 Record agent responses, grade them with deterministic checks or LLM-as-judge rubrics, enforce quality gates in CI, and compare runs to catch regressions — all from a single config file.
