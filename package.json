@@ -1,6 +1,6 @@
 {
 	"name": "agent-eval-kit",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"description": "TypeScript-native eval framework for AI agent workflows. Record-replay, deterministic + LLM graders, trajectory evaluation.",
 	"author": "Sean Flanagan <flanspan11@gmail.com>",
 	"repository": {
