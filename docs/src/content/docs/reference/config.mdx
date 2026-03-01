@@ -10,8 +10,6 @@ agent-eval-kit uses [c12](https://github.com/unjs/c12) for config loading. Creat
 - `eval.config.ts` (recommended)
 - `eval.config.js`
 - `eval.config.mjs`
-- `eval.config.yaml`
-- `eval.config.json`
 
 ```typescript
 import { defineConfig } from "agent-eval-kit";
@@ -21,80 +19,134 @@ export default defineConfig({
 });
 ```
 
+`defineConfig` is a pure identity function that provides TypeScript type inference.
+
 ## Top-level options
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `suites` | `Record<string, SuiteConfig>` | (required) | Named eval suites |
+| `suites` | `SuiteConfig[]` | (required) | Array of eval suites |
 | `judge` | `JudgeConfig` | — | Global LLM judge configuration |
-| `fixtureDir` | `string` | `.eval-fixtures` | Directory for recorded fixtures |
-| `plugins` | `EvalPlugin[]` | `[]` | Plugins to apply to all suites |
+| `fixtureDir` | `string` | `".eval-fixtures"` | Directory for recorded fixtures |
+| `plugins` | `EvalPlugin[]` | `[]` | Plugins to apply |
 | `reporters` | `ReporterConfig[]` | `["console"]` | Output reporters |
+| `run` | `RunConfig` | — | Global run settings |
+
+## Run config
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `defaultMode` | `"live" \| "replay" \| "judge-only"` | `"live"` | Default execution mode |
+| `timeoutMs` | `number` | `30000` | Per-case timeout in milliseconds |
+| `rateLimit` | `number` | — | Max requests per minute (live mode only) |
 
 ## Suite config
 
-Each suite defines a target, cases, graders, and gates.
+Each suite defines a target function, cases, graders, and gates.
 
 ```typescript
-{
-  suites: {
-    smoke: {
-      target: async (input) => ({ text: "response", latencyMs: 100 }),
-      cases: "cases/smoke.yaml",
-      graders: [{ name: "contains", options: { substring: "hello" } }],
-      gates: { minPassRate: 0.9 },
+import { defineConfig } from "agent-eval-kit";
+import { contains, latency } from "agent-eval-kit/graders";
+
+export default defineConfig({
+  suites: [
+    {
+      name: "smoke",
+      description: "Basic smoke tests",
+      target: async (input) => ({
+        text: "response",
+        latencyMs: 100,
+      }),
+      cases: "cases/smoke.jsonl",
+      defaultGraders: [
+        { grader: contains("hello"), weight: 1.0 },
+        { grader: latency(5000), weight: 0.5, required: true },
+      ],
+      gates: { passRate: 0.9 },
+      concurrency: 5,
       targetVersion: "v1.2.0",
-      replay: { ttlDays: 30, stripRaw: true },
+      replay: { ttlDays: 14, stripRaw: true },
+      tags: ["ci", "fast"],
     },
-  },
-}
+  ],
+});
 ```
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `target` | `(input) => Promise<TargetOutput>` | (required) | Function that calls your agent/API |
-| `cases` | `Case[] \| string` | (required) | Inline cases or path to YAML file |
-| `graders` | `GraderConfig[]` | `[]` | Graders applied to all cases (unless overridden) |
-| `gates` | `GateConfig` | `{}` | Quality thresholds |
+| `name` | `string` | (required) | Suite identifier |
+| `description` | `string` | — | Human-readable description |
+| `target` | `(input: CaseInput) => Promise<TargetOutput>` | (required) | Function that calls your agent/API |
+| `cases` | `Case[] \| string \| (Case \| string)[]` | (required) | Inline cases, file path(s), or a mix |
+| `defaultGraders` | `GraderConfig[]` | `[]` | Graders applied to all cases (unless a case defines its own) |
+| `gates` | `GateConfig` | — | Quality thresholds |
+| `concurrency` | `number` | — | Max parallel case executions |
 | `targetVersion` | `string` | — | Version identifier for fixture invalidation |
-| `replay` | `ReplayConfig` | `{}` | Replay-specific settings |
+| `replay` | `ReplayConfig` | — | Replay-specific settings |
+| `tags` | `string[]` | — | Tags for organization |
+
+### Cases
+
+Cases can be specified as:
+
+- **File path**: `"cases/smoke.jsonl"` or `"cases/smoke.yaml"` (resolved relative to config file)
+- **Inline array**: `[{ id: "test-1", input: { prompt: "hello" } }]`
+- **Mixed array**: `["cases/base.jsonl", { id: "extra", input: { prompt: "edge case" } }]`
+
+Supported formats: `.jsonl` (with `//` and `#` comment support), `.yaml`, `.yml`.
+
+Case IDs must be unique within a file.
+
+### Grader config
+
+Each entry in `defaultGraders` wraps a grader function with execution metadata:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `grader` | `GraderFn` | (required) | The grader function (e.g., `contains("hello")`) |
+| `weight` | `number` | `1.0` | Weight in the weighted average score |
+| `required` | `boolean` | `false` | If `true`, failure causes immediate score 0 |
+| `threshold` | `number` | — | Per-grader pass threshold |
 
 ## Case format
 
-```yaml
-- id: unique-case-id
-  input:
-    prompt: "User question"
-    context: "Optional context"
-  expected:
-    text: "Expected response"
-    containsAll: ["keyword1", "keyword2"]
-  category: "optional-category"
-  graders:  # Optional: overrides suite graders for this case
-    - name: exact-match
+```jsonl
+{"id": "unique-id", "input": {"prompt": "question"}, "expected": {"text": "answer"}, "category": "happy_path", "tags": ["important"]}
 ```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | yes | Unique identifier within the file |
+| `input` | `Record<string, unknown>` | yes | Arbitrary key-value pairs passed to your target |
+| `expected` | `CaseExpected` | no | Expected output for grader comparison |
+| `description` | `string` | no | Human-readable description |
+| `category` | `CaseCategory` | no | One of: `happy_path`, `edge_case`, `adversarial`, `multi_step`, `regression` |
+| `tags` | `string[]` | no | Tags for filtering and organization |
+
+### Expected output
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | `string` | Expected text (used by `factuality`, `exactMatch`, etc.) |
+| `toolCalls` | `ToolCall[]` | Expected tool calls |
+| `metadata` | `Record<string, unknown>` | Arbitrary metadata (e.g., `classification` for `llmClassify`) |
 
 ## Gate config
 
-```typescript
-gates: {
-  minPassRate: 0.9,          // Minimum overall pass rate
-  maxFailCount: 5,           // Maximum number of failures
-  requireCategories: {
-    critical: 1.0,           // 100% pass rate for "critical" category
-    regression: 0.95,        // 95% for "regression" category
-  },
-}
-```
+| Property | Type | Description |
+|----------|------|-------------|
+| `passRate` | `number` (0–1) | Minimum fraction of cases that must pass |
+| `maxCost` | `number` | Maximum total run cost in USD |
+| `p95LatencyMs` | `number` | Maximum 95th percentile latency in milliseconds |
+
+All gates are optional. A failed gate causes `gateResult.pass = false` and CLI exit code 1.
 
 ## Replay config
 
-```typescript
-replay: {
-  ttlDays: 30,    // Fixture staleness threshold (default: 30)
-  stripRaw: true, // Remove raw response field from fixtures
-}
-```
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ttlDays` | `number` | `14` | Fixture staleness threshold in days |
+| `stripRaw` | `boolean` | `true` | Remove `raw` field from recorded fixtures |
 
 ## Target output
 
@@ -102,11 +154,84 @@ The target function must return a `TargetOutput`:
 
 ```typescript
 interface TargetOutput {
-  text: string;              // Main text response
-  latencyMs: number;         // Response latency
+  text?: string;             // Main text response
+  latencyMs: number;         // Response latency (required)
   raw?: unknown;             // Raw API response (stripped in fixtures if configured)
   toolCalls?: ToolCall[];    // Tool/function calls made
-  tokenUsage?: TokenUsage;   // Token counts
+  tokenUsage?: TokenUsage;   // Token counts { input: number, output: number }
   cost?: number;             // Estimated cost in USD
 }
 ```
+
+Only `latencyMs` is required. All other fields are optional.
+
+## Judge config
+
+Required for LLM graders (`llmRubric`, `factuality`, `llmClassify`). The judge is provider-agnostic — you implement the `call` function for your LLM SDK.
+
+```typescript
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic();
+
+export default defineConfig({
+  judge: {
+    call: async (messages, options) => {
+      const response = await client.messages.create({
+        model: options?.model ?? "claude-sonnet-4-20250514",
+        max_tokens: options?.maxTokens ?? 1024,
+        messages: messages.filter((m) => m.role !== "system").map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+        system: messages.find((m) => m.role === "system")?.content,
+      });
+      return {
+        text: response.content[0].type === "text" ? response.content[0].text : "",
+        tokenUsage: {
+          input: response.usage.input_tokens,
+          output: response.usage.output_tokens,
+        },
+      };
+    },
+    model: "claude-sonnet-4-20250514",
+    temperature: 0,
+    maxTokens: 1024,
+  },
+  suites: [/* ... */],
+});
+```
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `call` | `JudgeCallFn` | yes | `(messages, options?) => Promise<JudgeResponse>` |
+| `model` | `string` | no | Default model identifier |
+| `temperature` | `number` | no | Default temperature |
+| `maxTokens` | `number` | no | Default max tokens |
+
+### JudgeMessage
+
+```typescript
+{ role: "system" | "user" | "assistant", content: string }
+```
+
+### JudgeResponse
+
+```typescript
+{ text: string, tokenUsage?: TokenUsage, cost?: number, modelId?: string }
+```
+
+## Reporter config
+
+Reporters can be specified as strings, objects, or with options:
+
+```typescript
+reporters: [
+  "console",                                    // string name
+  { reporter: "json", output: "results.json" }, // with output file
+  { reporter: "junit", output: "results.xml" }, // JUnit XML
+  "markdown",                                   // markdown table
+]
+```
+
+See [Reporters](/agent-eval-kit/reference/reporters/) for details on each format.

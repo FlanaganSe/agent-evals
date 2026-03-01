@@ -3,6 +3,110 @@ title: Graders Guide
 description: How to choose, configure, and compose graders
 ---
 
-See the [Graders API Reference](/reference/graders-api/) for the complete list of built-in graders.
+## Choosing graders
 
-Coming soon: detailed guide on choosing graders, composition strategies, and writing custom graders.
+Start with deterministic graders — they're fast, free, and reproducible. Reach for LLM graders only when deterministic checks can't capture the quality dimension you need.
+
+| If you need to check... | Use |
+|---|---|
+| Output contains specific text | `contains` / `notContains` |
+| Output matches exactly | `exactMatch` |
+| Output matches a pattern | `regex` |
+| Output is valid structured data | `jsonSchema` |
+| A tool was (or wasn't) called | `toolCalled` / `toolNotCalled` |
+| Tools were called in order | `toolSequence` |
+| Tool arguments are correct | `toolArgsMatch` |
+| Response time is acceptable | `latency` |
+| Cost is within budget | `cost` / `tokenCount` |
+| No prohibited content | `safetyKeywords` |
+| Numbers are grounded in data | `noHallucinatedNumbers` |
+| Overall quality (subjective) | `llmRubric` |
+| Factual consistency | `factuality` |
+| Output classification | `llmClassify` |
+
+See the [Graders API Reference](/agent-eval-kit/reference/graders-api/) for detailed parameters and options.
+
+## Configuring graders in suites
+
+Graders are configured in a suite's `defaultGraders` array. Each entry wraps a grader function with optional scoring metadata:
+
+```typescript
+import { contains, latency, llmRubric } from "agent-eval-kit/graders";
+
+defaultGraders: [
+  { grader: contains("Paris") },                          // weight 1.0 (default)
+  { grader: latency(5000), weight: 0.5 },                 // lower weight
+  { grader: llmRubric("Helpful response"), required: true }, // must pass
+]
+```
+
+### Weight
+
+Controls the grader's contribution to the weighted average score. Default: `1.0`. A grader with `weight: 2.0` has twice the influence of one with `weight: 1.0`.
+
+### Required
+
+If `true`, the grader must pass for the case to pass. A failed required grader immediately sets the case score to 0, regardless of other graders.
+
+### Threshold
+
+Per-grader pass threshold. The case-level threshold is inferred as the minimum across all grader thresholds (or 0.5 if none are set).
+
+## Composition
+
+Compose graders with boolean logic using `all`, `any`, and `not`:
+
+```typescript
+import { all, any, not, contains, toolCalled, latency } from "agent-eval-kit/graders";
+
+// All must pass
+all([contains("Paris"), toolCalled("search"), latency(5000)])
+
+// At least one must pass
+any([contains("capital of France"), contains("Paris")])
+
+// Must not match
+not(contains("I don't know"))
+```
+
+Composition operators do **not** short-circuit — all inner graders run, and all results are collected for complete reporting.
+
+| Operator | Score | Empty list |
+|---|---|---|
+| `all` | minimum of all scores | pass (vacuous truth) |
+| `any` | maximum of all scores | fail |
+| `not` | `1 - original` | — |
+
+## Case-level graders
+
+Cases can override suite graders entirely. When a case defines its own graders, the suite's `defaultGraders` are **replaced**, not merged:
+
+```typescript
+suites: [
+  {
+    name: "smoke",
+    target: myTarget,
+    cases: [
+      {
+        id: "special",
+        input: { prompt: "test" },
+        // This case uses ONLY exactMatch — suite defaults are ignored
+      },
+    ],
+    defaultGraders: [
+      { grader: contains("hello") },
+      { grader: latency(5000) },
+    ],
+  },
+]
+```
+
+This keeps cases self-contained and predictable.
+
+## Scoring algorithm
+
+1. **Required graders** are checked first. Any required grader that fails: `pass = false`, `score = 0`.
+2. **Weighted average**: `score = sum(grade.score × weight) / sum(weight)`.
+3. **Pass**: `score >= threshold` (default 0.5, or minimum of configured grader thresholds).
+
+Edge case: if no graders are configured, the case passes with score 1.0.

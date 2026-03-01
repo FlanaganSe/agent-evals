@@ -1,0 +1,226 @@
+---
+title: Programmatic API
+description: Using agent-eval-kit as a library
+---
+
+## Overview
+
+agent-eval-kit can be used programmatically in addition to the CLI. All core functions are exported from the main package.
+
+## Running evals
+
+```typescript
+import { loadConfig, runSuite, saveRun } from "agent-eval-kit";
+
+const config = await loadConfig({ cwd: process.cwd() });
+
+for (const suite of config.suites) {
+  const run = await runSuite(suite, {
+    mode: "replay",
+    timeoutMs: config.run.timeoutMs,
+    judge: config.judge?.call,
+    plugins: config.plugins,
+  });
+
+  await saveRun(run);
+  console.log(`${suite.name}: ${run.summary.passRate * 100}% pass rate`);
+}
+```
+
+## Config loading
+
+```typescript
+import { loadConfig, defineConfig } from "agent-eval-kit";
+
+// Load from eval.config.ts (auto-detected)
+const config = await loadConfig();
+
+// Load from a specific directory
+const config = await loadConfig({ cwd: "/path/to/project" });
+
+// Load from a specific config path
+const config = await loadConfig({ configPath: "custom.config.ts" });
+```
+
+`loadConfig` returns a `ValidatedConfig` with resolved cases, defaults applied, and plugins validated.
+
+## Storage
+
+```typescript
+import { saveRun, loadRun, listRuns } from "agent-eval-kit";
+
+// Save a run result
+const path = await saveRun(run);            // saves to .eval-runs/<id>.json
+const path = await saveRun(run, "my-dir");  // custom directory
+
+// Load a specific run
+const run = await loadRun("run-id");
+
+// List recent runs
+const runs = await listRuns();              // RunMeta[] sorted newest-first
+// Each: { id, suiteId, mode, timestamp, passRate }
+```
+
+## Comparison
+
+```typescript
+import { compareRuns, formatComparisonReport } from "agent-eval-kit/comparison";
+import { loadRun } from "agent-eval-kit";
+
+const base = await loadRun("base-run-id");
+const compare = await loadRun("compare-run-id");
+
+const comparison = compareRuns(base, compare, { scoreThreshold: 0.05 });
+
+const report = formatComparisonReport(comparison, { color: false, verbose: true });
+console.log(report);
+```
+
+## Reporters
+
+```typescript
+import {
+  formatConsoleReport,
+  formatJsonReport,
+  formatJunitXml,
+  formatMarkdownReport,
+} from "agent-eval-kit/reporters";
+
+// Console (human-readable)
+const text = formatConsoleReport(run, { color: true, verbose: false });
+
+// JSON (full Run object)
+const json = formatJsonReport(run);
+
+// JUnit XML
+const xml = formatJunitXml(run);
+
+// Markdown tables
+const md = formatMarkdownReport(run);
+```
+
+## Judge caching
+
+```typescript
+import {
+  createCachingJudge,
+  createDiskCachingJudge,
+  clearJudgeCache,
+  judgeCacheStats,
+} from "agent-eval-kit";
+
+// In-memory cache (process lifetime)
+const cached = createCachingJudge(myJudgeFn, { maxEntries: 1000 });
+
+// Disk cache (persists across runs)
+const diskCached = createDiskCachingJudge(myJudgeFn, {
+  cacheDir: ".eval-cache/judge",
+  ttlDays: 7,
+  maxEntries: 10_000,
+});
+
+// Cache management
+await clearJudgeCache();
+const stats = await judgeCacheStats();
+// stats: { entries, totalSize, ... }
+```
+
+## Cost estimation
+
+```typescript
+import { estimateCost } from "agent-eval-kit";
+
+const estimate = estimateCost(suite, { mode: "live", trials: 3 });
+// { judgeCalls: number, targetCalls: number, summary: string }
+```
+
+Does not estimate dollar cost — returns call counts so you can calculate based on your provider's pricing.
+
+## Statistics
+
+```typescript
+import { computeAllTrialStats, wilsonInterval } from "agent-eval-kit";
+
+// Compute per-case trial statistics (returns undefined if trials <= 1)
+const stats = computeAllTrialStats(trials);
+
+// Compute a Wilson score interval
+const [low, high] = wilsonInterval(successes, total, 1.96);
+```
+
+## File watcher
+
+```typescript
+import { createFileWatcher } from "agent-eval-kit";
+
+const watcher = await createFileWatcher({
+  paths: ["/path/to/project"],
+  debounceMs: 300,
+});
+
+watcher.on("change", async (files) => {
+  console.log("Changed:", files);
+  // Re-run evals
+});
+
+// Later: clean up
+await watcher.close();
+```
+
+## Progress plugin
+
+```typescript
+import { createProgressPlugin } from "agent-eval-kit";
+
+const progress = createProgressPlugin();
+// Use as a plugin: plugins: [progress]
+// Writes N/M (X%) to stderr on TTY
+```
+
+## Key types
+
+All types are exported from the main package or subpath exports:
+
+```typescript
+// Core types
+import type {
+  EvalConfig,
+  SuiteConfig,
+  Case,
+  CaseInput,
+  CaseExpected,
+  TargetOutput,
+  Run,
+  Trial,
+  RunSummary,
+  RunOptions,
+  GateConfig,
+} from "agent-eval-kit";
+
+// Grader types
+import type {
+  GraderFn,
+  GraderConfig,
+  GraderContext,
+  GraderFactory,
+  GradeResult,
+  CaseResult,
+} from "agent-eval-kit/graders";
+
+// Judge types
+import type {
+  JudgeCallFn,
+  JudgeCallOptions,
+  JudgeConfig,
+  JudgeMessage,
+  JudgeResponse,
+} from "agent-eval-kit";
+
+// Plugin types
+import type {
+  EvalPlugin,
+  PluginHooks,
+  BeforeRunContext,
+  AfterTrialContext,
+} from "agent-eval-kit/plugin";
+```

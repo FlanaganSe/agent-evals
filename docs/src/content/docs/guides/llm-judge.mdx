@@ -3,4 +3,216 @@ title: LLM Judge
 description: Using LLM-as-judge for evaluation
 ---
 
-Coming soon: guide on configuring LLM judges, writing rubrics, bias mitigation, cost optimization, and disk caching.
+## Overview
+
+When deterministic graders can't capture the quality you need, LLM graders use a language model to evaluate agent output. agent-eval-kit provides three LLM graders: `llmRubric`, `factuality`, and `llmClassify`.
+
+## Setting up a judge
+
+LLM graders require a `judge` configuration at the config root. The judge is provider-agnostic — you implement a `call` function that wraps your LLM SDK:
+
+```typescript
+import { defineConfig } from "agent-eval-kit";
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic();
+
+export default defineConfig({
+  judge: {
+    call: async (messages, options) => {
+      const response = await client.messages.create({
+        model: options?.model ?? "claude-sonnet-4-20250514",
+        max_tokens: options?.maxTokens ?? 1024,
+        messages: messages
+          .filter((m) => m.role !== "system")
+          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        system: messages.find((m) => m.role === "system")?.content,
+      });
+      return {
+        text: response.content[0].type === "text" ? response.content[0].text : "",
+        tokenUsage: {
+          input: response.usage.input_tokens,
+          output: response.usage.output_tokens,
+        },
+      };
+    },
+  },
+  suites: [/* ... */],
+});
+```
+
+### OpenAI example
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI();
+
+judge: {
+  call: async (messages, options) => {
+    const response = await client.chat.completions.create({
+      model: options?.model ?? "gpt-4o",
+      max_tokens: options?.maxTokens ?? 1024,
+      temperature: options?.temperature ?? 0,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    });
+    return {
+      text: response.choices[0].message.content ?? "",
+      tokenUsage: {
+        input: response.usage?.prompt_tokens ?? 0,
+        output: response.usage?.completion_tokens ?? 0,
+      },
+    };
+  },
+}
+```
+
+## LLM graders
+
+### `llmRubric`
+
+Scores output against natural language criteria on a 1–4 scale:
+
+| Score | Meaning | Normalized |
+|---|---|---|
+| 1 | Poor | 0.25 |
+| 2 | Fair | 0.50 |
+| 3 | Good | 0.75 |
+| 4 | Excellent | 1.00 |
+
+Default pass threshold is 0.75 (score 3+).
+
+```typescript
+import { llmRubric } from "agent-eval-kit/graders";
+
+// Simple string shorthand
+llmRubric("Response is helpful, accurate, and well-formatted")
+
+// With options
+llmRubric({
+  criteria: "Answer is concise and actionable",
+  passThreshold: 0.5,   // Accept score 2+
+  examples: [
+    { output: "Yes.", score: 4, reasoning: "Direct and concise" },
+    { output: "Well, I think maybe...", score: 1, reasoning: "Rambling" },
+  ],
+})
+```
+
+Few-shot `examples` calibrate the judge — highly recommended for consistent scoring.
+
+### `factuality`
+
+Evaluates factual consistency against a reference text. Requires `expected.text` on the case.
+
+```typescript
+import { factuality } from "agent-eval-kit/graders";
+
+factuality()
+factuality({ passThreshold: 0.9 })
+```
+
+Checks three dimensions: accuracy, completeness, and absence of fabrication. Uses a built-in rubric with 3 calibration examples.
+
+### `llmClassify`
+
+Classifies output into categories. Requires at least 2 categories.
+
+```typescript
+import { llmClassify } from "agent-eval-kit/graders";
+
+llmClassify({
+  categories: {
+    helpful: "Directly answers the question",
+    partial: "Partially addresses the question",
+    unhelpful: "Does not address the question",
+  },
+  criteria: "Focus on whether the core question is answered",
+})
+```
+
+Pass condition: If `expected.metadata.classification` is set on the case, the judge's classification must match. If no expected classification is set, the grader always passes (classification-only mode).
+
+## Judge caching
+
+LLM judge calls are expensive. agent-eval-kit provides two caching strategies to avoid redundant calls.
+
+### In-memory cache
+
+Caches results for the duration of the process:
+
+```typescript
+import { createCachingJudge } from "agent-eval-kit/graders";
+
+judge: {
+  call: createCachingJudge(myJudgeFn, { maxEntries: 1000 }),
+}
+```
+
+### Disk cache
+
+Persists cache across runs in `.eval-cache/judge/`:
+
+```typescript
+import { createDiskCachingJudge } from "agent-eval-kit";
+
+judge: {
+  call: createDiskCachingJudge(myJudgeFn, {
+    cacheDir: ".eval-cache/judge",  // default
+    ttlDays: 7,                      // default
+    maxEntries: 10_000,              // default
+  }),
+}
+```
+
+Both caches only cache calls with `temperature === 0` (deterministic responses). Cache keys are SHA-256 hashes of the messages, model, and max tokens.
+
+### Cache management
+
+```bash
+# View cache stats
+agent-eval-kit cache stats
+
+# Clear judge cache
+agent-eval-kit cache clear --judge
+```
+
+Programmatically:
+
+```typescript
+import { clearJudgeCache, judgeCacheStats } from "agent-eval-kit";
+
+await clearJudgeCache();           // default dir
+await clearJudgeCache(".my-cache");
+const stats = await judgeCacheStats();
+```
+
+## Cost tracking
+
+LLM grader results include cost metadata in `grade.metadata.judgeCost`. The console reporter aggregates and displays total judge cost per run. Cost data flows from the `JudgeResponse.cost` and `JudgeResponse.tokenUsage` fields you return from your judge function.
+
+## Judge-only mode
+
+When tuning judge criteria, you don't need to re-run your target. Judge-only mode re-grades a previous run:
+
+```bash
+# Run initially
+agent-eval-kit run --suite=smoke
+
+# List runs to find the ID
+agent-eval-kit list
+
+# Re-grade with updated graders
+agent-eval-kit run --mode=judge-only --run-id=<run-id> --suite=smoke
+```
+
+This reuses the target outputs from the previous run and applies your current graders to them.
+
+## Bias mitigation
+
+The built-in judge prompt includes rules to mitigate common LLM judge biases:
+- No length bias — longer responses are not automatically scored higher
+- Chain-of-thought enforced — reasoning before scoring
+- Structured JSON response format — prevents ambiguous parsing
+
+The judge response parser has a 3-layer fallback: strict JSON, markdown code block extraction, and text pattern matching (`Score: N`).

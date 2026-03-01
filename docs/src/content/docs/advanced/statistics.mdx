@@ -1,6 +1,85 @@
 ---
-title: Statistics
-description: Understanding trial statistics and confidence intervals
+title: Statistics & Trials
+description: Understanding multi-trial analysis, Wilson intervals, and flakiness detection
 ---
 
-Coming soon: guide on multi-trial analysis, Wilson intervals, and pass^k semantics.
+## Multi-trial runs
+
+Running multiple trials per case reveals flaky behavior and provides statistical confidence in pass rates:
+
+```bash
+agent-eval-kit run --suite=smoke --trials=5
+```
+
+Each case is executed N times. Results include per-case trial statistics.
+
+## Trial statistics
+
+When `trials > 1`, each case gets a `TrialStats` object:
+
+| Metric | Description |
+|--------|-------------|
+| `trialCount` | Number of trials run |
+| `passCount` | Number of passing trials |
+| `failCount` | Number of failing trials |
+| `errorCount` | Number of errored trials |
+| `passRate` | `passCount / trialCount` |
+| `meanScore` | Average score across trials |
+| `scoreStdDev` | Standard deviation (Bessel's correction, n-1) |
+| `ci95Low` | Lower bound of 95% confidence interval (Wilson score) |
+| `ci95High` | Upper bound of 95% confidence interval (Wilson score) |
+| `flaky` | `true` if some trials pass and some fail |
+
+## Pass semantics
+
+A case passes only if **all** trials pass (pass^k semantics). This is intentionally strict — a case that passes 4 out of 5 times is flagged as flaky, not passing.
+
+## Wilson score interval
+
+Confidence intervals use the [Wilson score interval](https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval#Wilson_score_interval) (z = 1.96 for 95% confidence). This method is more accurate than simple proportion intervals for small sample sizes.
+
+The console reporter displays these intervals:
+
+```
+case-1: 4/5 passed (80%) [95% CI: 0.37–0.96] ⚠ flaky
+```
+
+## Flakiness detection
+
+A case is marked `flaky: true` when it has at least one pass and at least one fail across trials. This surfaces non-determinism in your target — critical for AI agents where the same input can produce different outputs.
+
+## When to use trials
+
+- **Flakiness detection**: Run 3–5 trials to surface non-deterministic behavior
+- **Confidence intervals**: Run 10+ trials for meaningful statistical bounds
+- **Cost consideration**: Each trial calls your target (in live mode), so more trials = more API cost. Use replay mode for grader-only experimentation.
+
+## Programmatic access
+
+```typescript
+import { computeAllTrialStats, wilsonInterval } from "agent-eval-kit";
+
+// Compute stats for all cases
+const stats = computeAllTrialStats(trials);
+
+// Compute a single Wilson interval
+const [low, high] = wilsonInterval(successes, total, 1.96);
+```
+
+## Run summary statistics
+
+The run summary always includes aggregate stats:
+
+| Field | Description |
+|-------|-------------|
+| `totalCases` | Total cases evaluated |
+| `passed` | Cases that passed |
+| `failed` | Cases that failed |
+| `errors` | Cases that errored |
+| `passRate` | `passed / totalCases` |
+| `totalCost` | Aggregate cost in USD |
+| `totalDurationMs` | Wall-clock duration |
+| `p95LatencyMs` | 95th percentile latency |
+| `gateResult` | Gate evaluation result |
+| `byCategory` | Per-category pass rate breakdown |
+| `trialStats` | Per-case trial statistics (when `trials > 1`) |

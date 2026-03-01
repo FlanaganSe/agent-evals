@@ -3,4 +3,80 @@ title: Plugins
 description: Extending agent-eval-kit with plugins
 ---
 
-Coming soon: guide on using and authoring plugins.
+## Overview
+
+Plugins extend agent-eval-kit with custom graders and lifecycle hooks. They are registered in your eval config and apply to all suites.
+
+## Using a plugin
+
+```typescript
+import { defineConfig } from "agent-eval-kit";
+import { myPlugin } from "./my-plugin";
+
+export default defineConfig({
+  plugins: [myPlugin],
+  suites: [/* ... */],
+});
+```
+
+Plugin graders are used like any other grader:
+
+```typescript
+import { myCustomGrader } from "./my-plugin";
+
+defaultGraders: [
+  { grader: myCustomGrader("some-config") },
+]
+```
+
+## Writing a plugin
+
+A plugin is an object implementing the `EvalPlugin` interface:
+
+```typescript
+import type { EvalPlugin } from "agent-eval-kit/plugin";
+
+export const myPlugin: EvalPlugin = {
+  name: "my-plugin",       // required, non-empty
+  version: "1.0.0",        // required, non-empty
+
+  // Optional: custom graders
+  graders: {
+    myGrader: async (output, expected, context) => ({
+      pass: output.text?.includes("hello") ?? false,
+      score: output.text?.includes("hello") ? 1 : 0,
+      reason: "Checked for greeting",
+      graderName: "my-plugin/myGrader",
+    }),
+  },
+
+  // Optional: lifecycle hooks
+  hooks: {
+    beforeRun: async (context) => {
+      console.log(`Starting suite: ${context.suiteId}`);
+    },
+    afterTrial: async (trial, context) => {
+      console.log(`Trial ${context.completedCount}/${context.totalCount}`);
+    },
+    afterRun: async (run) => {
+      console.log(`Run complete: ${run.summary.passRate * 100}%`);
+    },
+  },
+};
+```
+
+See the [Plugin API Reference](/agent-eval-kit/reference/plugin-api/) for the complete interface.
+
+## Plugin grader naming
+
+In the grader registry and MCP tools, plugin graders are namespaced as `<plugin-name>/<grader-name>` (e.g., `my-plugin/myGrader`).
+
+## Validation
+
+The config loader validates plugins at load time:
+
+- `name` must be non-empty
+- `version` must be non-empty
+- Grader names must not conflict across plugins
+
+Duplicate grader names across plugins cause a load error.

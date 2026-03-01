@@ -5,15 +5,18 @@ description: Deep dive on the fixture-based record-replay engine
 
 ## Overview
 
-The record-replay engine captures your target's responses as fixtures and replays them for instant, zero-cost eval runs. This is the core differentiator of agent-eval-kit.
+The record-replay engine captures your target's responses as fixtures and replays them for instant, zero-cost eval runs. This is the core differentiator of agent-eval-kit — record once, replay thousands of times.
 
 ## Recording fixtures
 
 ```bash
 agent-eval-kit run --mode=live --record --suite=smoke
+
+# Or use the shorthand
+agent-eval-kit record --suite=smoke
 ```
 
-This calls your target for each case and saves the response to `.eval-fixtures/smoke/<case-id>.jsonl`.
+This calls your target for each case and saves the response to `.eval-fixtures/`.
 
 ## Replaying from fixtures
 
@@ -27,32 +30,35 @@ In replay mode, the target function is never called. Responses are loaded from f
 
 Each fixture is a JSONL file with two lines:
 
-1. **Meta line**: Config hash, framework version, timestamps
+1. **Meta line**: Schema version, suite ID, case ID, config hash, framework version, timestamp
 2. **Data line**: The recorded `TargetOutput`
 
 ```jsonl
-{"configHash":"abc123","frameworkVersion":"0.0.1","recordedAt":"2026-02-28T12:00:00.000Z"}
-{"text":"Agent response","latencyMs":150,"toolCalls":[]}
+{"_meta":{"schemaVersion":"1.0.0","suiteId":"smoke","caseId":"greeting","configHash":"abc123","recordedAt":"2026-02-28T12:00:00.000Z","frameworkVersion":"0.0.1"}}
+{"output":{"text":"Agent response","latencyMs":150,"toolCalls":[]}}
 ```
 
 Keys are sorted deterministically for clean git diffs.
 
 ## Config hash invalidation
 
-Fixtures are keyed by a config hash computed from the suite name and `targetVersion`. When either changes, fixtures are automatically invalidated:
+Fixtures are keyed by a config hash computed from the suite name, case count, and case IDs. When any of these change, fixtures are automatically invalidated — you'll see warnings or errors (with `--strict-fixtures`) prompting you to re-record.
+
+The `targetVersion` field provides manual invalidation control:
 
 ```typescript
-suites: {
-  smoke: {
+suites: [
+  {
+    name: "smoke",
     targetVersion: "v2.0.0", // Changing this invalidates fixtures
     // ...
   },
-}
+]
 ```
 
 ## Staleness
 
-Fixtures have a configurable TTL (default: 30 days). Stale fixtures generate warnings:
+Fixtures have a configurable TTL (default: **14 days**). Stale fixtures generate warnings:
 
 ```typescript
 replay: {
@@ -60,7 +66,11 @@ replay: {
 }
 ```
 
-Use `--strict-fixtures` to fail on stale fixtures instead of warning.
+Use `--strict-fixtures` to fail on stale fixtures instead of warning:
+
+```bash
+agent-eval-kit run --mode=replay --strict-fixtures --suite=smoke
+```
 
 ## Re-recording
 
@@ -74,17 +84,20 @@ agent-eval-kit run --mode=live --record --suite=smoke
 
 ## Stripping raw responses
 
-To reduce fixture size, strip the `raw` field:
+By default, the `raw` field is stripped from fixtures to reduce size:
 
 ```typescript
 replay: {
-  stripRaw: true,
+  stripRaw: true,  // default
 }
 ```
 
+Set to `false` to preserve the full raw API response in fixtures.
+
 ## Best practices
 
-- Commit `.eval-fixtures/` to git for reproducible CI
-- Add `.eval-fixtures/**/*.jsonl linguist-generated` to `.gitattributes` (auto-generated)
+- **Commit `.eval-fixtures/`** to git for reproducible CI
+- Add `.eval-fixtures/**/*.jsonl linguist-generated` to `.gitattributes` to reduce PR noise
 - Use `targetVersion` to control when fixtures are invalidated
 - Re-record periodically to catch API behavior changes
+- Use `--strict-fixtures` in CI for maximum reliability

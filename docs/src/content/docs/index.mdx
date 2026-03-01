@@ -38,22 +38,24 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 ```typescript
 // eval.config.ts
 import { defineConfig } from "agent-eval-kit";
+import { contains, latency } from "agent-eval-kit/graders";
 
 export default defineConfig({
-  suites: {
-    smoke: {
+  suites: [
+    {
+      name: "smoke",
       target: async (input) => {
         const response = await myAgent(input.prompt);
         return { text: response.text, latencyMs: response.latencyMs };
       },
-      cases: "cases/smoke.yaml",
-      graders: [
-        { name: "contains", options: { substring: "expected output" } },
-        { name: "latency", options: { maxMs: 5000 } },
+      cases: "cases/smoke.jsonl",
+      defaultGraders: [
+        { grader: contains("expected output") },
+        { grader: latency(5000) },
       ],
-      gates: { minPassRate: 0.9 },
+      gates: { passRate: 0.9 },
     },
-  },
+  ],
 });
 ```
 

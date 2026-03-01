@@ -1,6 +1,111 @@
 ---
 title: Custom Graders
-description: Writing your own graders
+description: Writing your own grader functions
 ---
 
-Coming soon: guide on creating custom grader functions and registering them.
+## Overview
+
+A grader is any async function matching the `GraderFn` signature. You can write custom graders for domain-specific checks that the 20 built-in graders don't cover.
+
+## Writing a custom grader
+
+```typescript
+import type { GraderFn } from "agent-eval-kit/graders";
+
+const myGrader: GraderFn = async (output, expected, context) => {
+  const hasGreeting = output.text?.toLowerCase().includes("hello") ?? false;
+  return {
+    pass: hasGreeting,
+    score: hasGreeting ? 1 : 0,
+    reason: hasGreeting ? "Contains greeting" : "Missing greeting",
+    graderName: "myGrader",
+  };
+};
+```
+
+## Grader factories
+
+For configurable graders, create a factory function:
+
+```typescript
+import type { GraderFn } from "agent-eval-kit/graders";
+
+function minWordCount(min: number): GraderFn {
+  return async (output, _expected, _context) => {
+    const count = (output.text ?? "").split(/\s+/).filter(Boolean).length;
+    const pass = count >= min;
+    return {
+      pass,
+      score: pass ? 1 : Math.min(count / min, 1),
+      reason: pass ? `${count} words (>= ${min})` : `Only ${count} words (need ${min})`,
+      graderName: "minWordCount",
+    };
+  };
+}
+```
+
+Use it like any built-in grader:
+
+```typescript
+defaultGraders: [
+  { grader: minWordCount(50) },
+]
+```
+
+## Using the judge in custom graders
+
+If you need LLM judging, access it via `context.judge`:
+
+```typescript
+const domainExpert: GraderFn = async (output, expected, context) => {
+  if (!context.judge) {
+    return {
+      pass: false,
+      score: 0,
+      reason: "No judge configured",
+      graderName: "domainExpert",
+    };
+  }
+
+  const response = await context.judge([
+    { role: "system", content: "You are a medical accuracy expert..." },
+    { role: "user", content: `Evaluate: ${output.text}` },
+  ], { temperature: 0 });
+
+  // Parse the response...
+  return {
+    pass: true,
+    score: 1,
+    reason: response.text,
+    graderName: "domainExpert",
+  };
+};
+```
+
+## Rules for deterministic graders
+
+Built-in deterministic graders follow strict rules you should also follow:
+
+- **Pure functions**: No I/O, no side effects, no external state
+- **Deterministic**: Same input always produces same output
+- **Score range**: Always 0–1
+- **graderName**: Always set — identifies the grader in reports
+
+## Distributing as a plugin
+
+To share graders across projects, package them as a plugin:
+
+```typescript
+import type { EvalPlugin } from "agent-eval-kit/plugin";
+
+export const myGraders: EvalPlugin = {
+  name: "my-graders",
+  version: "1.0.0",
+  graders: {
+    minWordCount: minWordCount(50),
+    domainExpert,
+  },
+};
+```
+
+See the [Plugin API](/agent-eval-kit/reference/plugin-api/) for the full plugin interface.

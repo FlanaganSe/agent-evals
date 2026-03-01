@@ -5,42 +5,72 @@ description: Complete reference for all agent-eval-kit CLI commands and flags
 
 ## Global flags
 
-| Flag | Type | Description |
-|------|------|-------------|
-| `--verbose` | boolean | Enable verbose output |
-| `--quiet` | boolean | Suppress non-essential output |
+These flags are available on every command:
+
+| Flag | Alias | Type | Description |
+|------|-------|------|-------------|
+| `--verbose` | `-v` | boolean | Enable detailed output |
+| `--quiet` | `-q` | boolean | Suppress all but errors |
+| `--no-color` | — | boolean | Disable color output |
+| `--config` | `-c` | string | Path to config file or directory |
+
+All logging goes to stderr. Stdout is reserved for reporter output (JSON, JUnit), keeping it clean for piping.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success — all gates passed |
+| `1` | Eval failure — a gate did not pass |
+| `2` | Config error — invalid arguments or configuration |
+| `3` | Runtime error — unexpected failure |
+| `130` | Aborted — SIGINT (Ctrl+C) |
 
 ## Commands
 
 ### `run`
 
-Execute an eval suite against the target function.
+Execute eval suites against the target function.
 
 ```bash
 agent-eval-kit run [options]
 ```
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--suite` | string | (all) | Suite name to run |
-| `--mode` | `live\|replay\|judge-only` | `live` | Execution mode |
-| `--record` | boolean | `false` | Record fixtures during live mode |
-| `--trials` | number | `1` | Number of trials per case |
-| `--concurrency` | number | `1` | Max parallel case executions |
-| `--timeout` | number | `30000` | Per-case timeout in milliseconds |
-| `--run-id` | string | — | Previous run ID (for judge-only mode) |
-| `--update-fixtures` | boolean | `false` | Force live mode + record (re-record all fixtures) |
-| `--no-progress` | boolean | `false` | Disable live progress display |
-| `--watch` | boolean | `false` | Re-run on file changes |
-| `--strict-fixtures` | boolean | `false` | Fail on stale fixtures instead of warning |
+| Flag | Alias | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--suite` | `-s` | string | (all) | Comma-separated suite name filter |
+| `--mode` | — | string | config default | `live`, `replay`, or `judge-only` |
+| `--record` | — | boolean | `false` | Record fixtures during live mode |
+| `--filter` | `-f` | string | — | Comma-separated case ID filter |
+| `--filter-failing` | — | string | — | Re-run only failing cases from a previous run ID |
+| `--run-id` | — | string | — | Previous run ID (required for `judge-only` mode) |
+| `--trials` | `-t` | number | `1` | Number of trials per case |
+| `--concurrency` | — | number | — | Max parallel case executions |
+| `--rate-limit` | — | number | — | Max requests per minute (live mode only) |
+| `--strict-fixtures` | — | boolean | `false` | Fail on stale or missing fixtures |
+| `--update-fixtures` | — | boolean | `false` | Force `--mode=live --record` |
+| `--reporter` | `-r` | string | `console` | Reporter: `console`, `json`, `junit`, `markdown` |
+| `--output` | `-o` | string | — | Output file path for reporter |
+| `--confirm-cost` | — | boolean | `false` | Show cost estimate and confirm before running |
+| `--auto-approve` | — | boolean | `false` | Skip confirmation in non-interactive mode |
+| `--no-progress` | — | boolean | `false` | Disable progress display |
+| `--watch` | `-w` | boolean | `false` | Watch files and re-run on changes |
+
+`--filter` and `--filter-failing` are mutually exclusive.
+
+SIGINT (Ctrl+C) gracefully aborts the run. Press again to force exit.
+
+Run results are saved to `.eval-runs/<uuid>.json`. In GitHub Actions, results are also written to `$GITHUB_STEP_SUMMARY`.
 
 ### `record`
 
 Shorthand for `run --mode=live --record`.
 
 ```bash
-agent-eval-kit record --suite=smoke
+agent-eval-kit record [options]
 ```
+
+Accepts: `--suite`, `--concurrency`, `--rate-limit`, and global flags.
 
 ### `compare`
 
@@ -50,18 +80,30 @@ Compare two eval runs side-by-side.
 agent-eval-kit compare --base=<run-id> --compare=<run-id>
 ```
 
-| Flag | Type | Description |
-|------|------|-------------|
-| `--base` | string | Base run ID (older, "before") |
-| `--compare` | string | Compare run ID (newer, "after") |
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--base` | string | (required) | Base run ID (older, "before") |
+| `--compare` | string | (required) | Compare run ID (newer, "after") |
+| `--fail-on-regression` | boolean | `false` | Exit 1 if any regressions detected |
+| `--score-threshold` | number | `0.05` | Minimum score delta to count as a change |
+| `--format` | string | `console` | Output format: `console` or `json` |
+
+The comparison shows per-case regressions, improvements, score deltas, per-grader changes, per-category breakdowns, cost deltas, and gate changes.
 
 ### `list`
 
 List recent eval runs.
 
 ```bash
-agent-eval-kit list
+agent-eval-kit list [options]
 ```
+
+| Flag | Alias | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--limit` | `-n` | number | `10` | Maximum runs to show |
+| `--suite` | — | string | — | Filter by suite name |
+
+Output is a table: ID | Suite | Mode | Pass Rate | Date. Pass rate is color-coded: green (&ge;90%), yellow (&ge;70%), red (below 70%).
 
 ### `cache`
 
@@ -69,11 +111,13 @@ Cache management commands.
 
 #### `cache stats`
 
-Show cache statistics for fixtures and judge cache.
+Show statistics for fixture and judge caches.
 
 ```bash
 agent-eval-kit cache stats
 ```
+
+Displays suites, fixture counts, disk size, age, and judge cache entries.
 
 #### `cache clear`
 
@@ -94,28 +138,50 @@ Run health checks on your eval setup.
 agent-eval-kit doctor
 ```
 
+Checks: Node.js version (>= 20), config validation, duplicate suite names, `.eval-runs/` and `.eval-fixtures/` directories, git hook manager detection, `AGENTS.md` presence. Exits 1 if any checks fail.
+
 ### `init`
 
-Initialize a new eval project with config and case files.
+Initialize a new eval project with an interactive wizard.
 
 ```bash
-agent-eval-kit init
+agent-eval-kit init [options]
 ```
+
+| Flag | Alias | Type | Description |
+|------|-------|------|-------------|
+| `--cwd` | — | string | Working directory |
+| `--yes` | `-y` | boolean | Non-interactive mode with defaults |
+
+The wizard auto-detects your framework (Vercel AI SDK, LangChain, Mastra, or custom), package manager, and git hook manager. It creates:
+
+- `eval.config.ts` — config with framework-specific target stub
+- `cases/smoke.jsonl` — 3 starter cases
+- `.eval-fixtures/.gitkeep`
+- `.github/workflows/evals.yml` (optional)
+- `AGENTS.md` (optional)
 
 ### `install-hooks`
 
-Install git hooks for pre-push eval checks.
+Install git pre-push hooks for eval checks.
 
 ```bash
-agent-eval-kit install-hooks
+agent-eval-kit install-hooks [options]
 ```
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--cwd` | string | Working directory |
+| `--manager` | string | Force hook manager: `husky`, `lefthook`, `simple-git-hooks`, or `none` (raw git hook) |
+
+Auto-detects your hook manager if `--manager` is not specified. All installers are idempotent — safe to run multiple times. The hook runs `agent-eval-kit run --mode=replay --quiet` on pre-push.
 
 ### `mcp`
 
-Start the MCP server for AI assistant integration. Exposes 8 tools (list suites, describe config, list graders, validate config, run suites, list runs, compare runs, get run details) and 3 resources (config schema, case schema, grader reference).
+Start the MCP server for AI assistant integration.
 
 ```bash
 agent-eval-kit mcp
 ```
 
-Requires `@modelcontextprotocol/sdk` to be installed. See [MCP Server](/advanced/mcp-server/) for full tool reference and setup instructions.
+Requires `@modelcontextprotocol/sdk` to be installed. See [MCP Server](/agent-eval-kit/advanced/mcp-server/) for the full tool reference.

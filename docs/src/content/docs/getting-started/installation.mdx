@@ -6,7 +6,7 @@ description: Install agent-eval-kit and set up your first eval project
 ## Prerequisites
 
 - **Node.js** 20+ (22 LTS recommended for native TypeScript execution)
-- **pnpm**, **npm**, or **yarn** package manager
+- **pnpm**, **npm**, **yarn**, or **bun** package manager
 
 ## Install
 
@@ -19,6 +19,9 @@ npm install --save-dev agent-eval-kit
 
 # yarn
 yarn add --dev agent-eval-kit
+
+# bun
+bun add -D agent-eval-kit
 ```
 
 ## Optional dependencies
@@ -31,10 +34,6 @@ If you want to use the MCP server for Claude Code, Cursor, or other AI assistant
 pnpm add @modelcontextprotocol/sdk
 ```
 
-### Watch mode on Linux
-
-Watch mode uses native `fs.watch` on macOS and Windows. On Linux, it automatically uses `chokidar` which is included as a dependency.
-
 ## Verify installation
 
 ```bash
@@ -45,17 +44,37 @@ You should see the available commands listed.
 
 ## Initialize a project
 
-The `init` wizard creates a starter config and case files:
+The `init` wizard creates a starter config, case files, and optionally a GitHub Actions workflow:
 
 ```bash
 npx agent-eval-kit init
 ```
 
 This creates:
-- `eval.config.ts` — main configuration file
-- `cases/` — directory for test case YAML files
-- `.gitignore` entries for `.eval-runs/` and `.eval-fixtures/`
+- `eval.config.ts` — main configuration file with a framework-specific target stub
+- `cases/smoke.jsonl` — 3 starter test cases
+- `.eval-fixtures/.gitkeep` — fixture directory
+- `.github/workflows/evals.yml` — CI workflow (optional)
+- `AGENTS.md` — AI agent boundaries file (optional)
+
+The wizard auto-detects your framework (Vercel AI SDK, LangChain, Mastra, or custom) and package manager.
+
+For non-interactive setup: `npx agent-eval-kit init --yes`
+
+## Package exports
+
+agent-eval-kit provides several subpath exports for targeted imports:
+
+| Import | Description |
+|--------|-------------|
+| `agent-eval-kit` | Main entry — `defineConfig`, runner, storage, comparison, caching utilities |
+| `agent-eval-kit/graders` | All 20 graders, composition operators, scoring, grader types |
+| `agent-eval-kit/plugin` | Plugin interface types (`EvalPlugin`, `PluginHooks`) |
+| `agent-eval-kit/reporters` | Reporter formatting functions |
+| `agent-eval-kit/comparison` | `compareRuns`, `formatComparisonReport` |
+| `agent-eval-kit/fixtures` | Fixture loading and management |
+| `agent-eval-kit/watcher` | File watcher for watch mode |
 
 ## Next steps
 
-Continue to [Quick Start](/getting-started/quick-start/) to run your first eval.
+Continue to [Quick Start](/agent-eval-kit/getting-started/quick-start/) to run your first eval.

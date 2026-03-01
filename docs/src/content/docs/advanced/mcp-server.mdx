@@ -33,19 +33,18 @@ Add to your assistant's MCP configuration (e.g., `.claude/settings.json` for Cla
 
 ### 3. Start using
 
-The MCP server exposes 8 tools and 3 resources.
+The MCP server exposes 8 tools and 3 resources. The server uses stdio transport — all JSON-RPC communication goes over stdout, all logging goes to stderr.
 
 ## Recommended workflow
 
 1. **`list-suites`** — Discover available suite names
 2. **`list-graders`** — Understand which graders are available
 3. **`describe-config`** — Inspect the full config structure
-4. **`run-suite`** — Execute an eval suite
-5. **`list-runs`** — Find run IDs
-6. **`get-run-details`** — Inspect a specific run
-7. **`compare-runs`** — Diff two runs
-
-Use **`validate-config`** after modifying `eval.config.ts` to catch errors before running.
+4. **`validate-config`** — Catch config errors before running
+5. **`run-suite`** — Execute an eval suite
+6. **`list-runs`** — Find run IDs
+7. **`get-run-details`** — Inspect a specific run
+8. **`compare-runs`** — Diff two runs
 
 ## Tools
 
@@ -53,46 +52,50 @@ Use **`validate-config`** after modifying `eval.config.ts` to catch errors befor
 
 #### `list-suites`
 
-List all eval suites defined in the project's `eval.config.ts` with case counts, categories, and gates.
+List all eval suites with case counts, categories, and gates.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `verbose` | boolean | `false` | Include full case IDs in output |
 
+Returns JSON with `{ suites, totalSuites }`.
+
 #### `describe-config`
 
-Return the fully loaded eval config as structured JSON, including suites, cases, gates, and run settings.
+Return the fully loaded eval config as structured JSON. Functions (target, judge, graders) are shown as metadata, not serialized.
 
-No parameters. Loads and evaluates `eval.config.ts`. Functions (target, judge, graders) are shown as metadata counts, not serialized.
+No parameters.
 
 #### `list-graders`
 
-Enumerate all available graders with their parameters, defaults, and usage examples.
+Enumerate all available graders with parameters, defaults, and usage examples.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `tier` | string | (all) | Filter: `deterministic`, `llm`, or `composition` |
 | `category` | string | (all) | Filter: `text`, `tool-call`, `metric`, `safety`, `llm-judge`, `composition` |
-| `includePlugins` | boolean | `true` | Include plugin graders (loads config) |
+| `includePlugins` | boolean | `true` | Include plugin-contributed graders |
 
 #### `validate-config`
 
-Validate that `eval.config.ts` loads without errors and check for common issues.
+Validate that `eval.config.ts` loads without errors and check for common issues (empty suites, missing default graders).
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `configPath` | string | `eval.config` | Custom config file path |
+| `configPath` | string | — | Custom config file path |
+
+Returns `{ valid, suiteCount, totalCases, warnings }` or `{ valid: false, error }`.
 
 ### Execution tools
 
 #### `run-suite`
 
-Execute an eval suite by name and return pass/fail results with per-case grades.
+Execute an eval suite by name and return formatted results.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `suite` | string | (required) | Suite name (use `list-suites` to discover) |
-| `mode` | `live\|replay` | `replay` | Execution mode |
+| `mode` | `live \| replay` | `replay` | Execution mode |
 | `record` | boolean | `false` | Record fixtures in live mode |
 
 #### `list-runs`
@@ -122,7 +125,7 @@ Get detailed results for a specific run including per-case grades, scores, and f
 
 ## Resources
 
-Resources are read-only reference data that agents can cache. Access them via MCP resource reads.
+Resources are read-only reference data that agents can cache.
 
 | URI | Type | Description |
 |-----|------|-------------|
@@ -145,6 +148,4 @@ All tools include MCP annotations for agent safety reasoning:
 | `compare-runs` | yes | no | yes |
 | `get-run-details` | yes | no | yes |
 
-## Stdio safety
-
-The MCP server uses stdio transport. All JSON-RPC communication goes over stdout. All logging goes to stderr. This is handled automatically — no configuration needed.
+Tool handlers are pure async functions `(args, cwd) => Promise<ToolResult>`, making them testable without the MCP SDK.

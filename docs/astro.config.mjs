@@ -43,6 +43,7 @@ export default defineConfig({
 						{ label: "Config", slug: "reference/config" },
 						{ label: "Graders API", slug: "reference/graders-api" },
 						{ label: "Reporters", slug: "reference/reporters" },
+						{ label: "Programmatic API", slug: "reference/programmatic-api" },
 						{ label: "Plugin API", slug: "reference/plugin-api" },
 					],
 				},

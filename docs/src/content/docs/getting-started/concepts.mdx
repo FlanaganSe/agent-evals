@@ -9,17 +9,17 @@ agent-eval-kit uses precise terminology. Understanding these terms makes the doc
 
 | Term | Definition |
 |------|-----------|
-| **Suite** | A named collection of test cases with a target, graders, and gates |
-| **Case** | A single test input with expected output |
+| **Suite** | A collection of test cases with a target function, default graders, and quality gates |
+| **Case** | A single test input with optional expected output |
 | **Trial** | One execution of a case (multiple trials enable statistical analysis) |
 | **Run** | A complete execution of a suite — all trials, all grades, all metadata |
-| **Grader** | A function that scores a target's output against expected values |
+| **Grader** | A function that scores a target's output (deterministic or LLM-based) |
 | **Gate** | A threshold that determines if a run passes or fails (e.g., 90% pass rate) |
 | **Fixture** | A recorded target response for replay without API calls |
 
 ## Execution Modes
 
-### Live mode (default)
+### Live mode
 
 Calls your target function for every case. Use this for initial recording and when you need fresh responses.
 
@@ -37,7 +37,7 @@ agent-eval-kit run --mode=replay --suite=smoke
 
 ### Judge-only mode
 
-Re-grades a previous run with updated graders. Useful when tuning LLM judge prompts.
+Re-grades a previous run with updated graders. Useful when tuning LLM judge criteria without re-running the target.
 
 ```bash
 agent-eval-kit run --mode=judge-only --run-id=<previous-run-id> --suite=smoke
@@ -48,31 +48,52 @@ agent-eval-kit run --mode=judge-only --run-id=<previous-run-id> --suite=smoke
 Graders are functions that score outputs. agent-eval-kit ships 20 built-in graders in three tiers:
 
 ### Deterministic graders
-Fast, free, reproducible. Pure functions with no I/O. Examples: `contains`, `exactMatch`, `regex`, `jsonSchema`, `toolCalled`, `toolSequence`, `latency`, `cost`, `safetyKeywords`, `noHallucinatedNumbers`.
+Fast, free, reproducible. Pure functions with no I/O:
+- **Text**: `contains`, `notContains`, `exactMatch`, `regex`, `jsonSchema`
+- **Tool call**: `toolCalled`, `toolNotCalled`, `toolSequence`, `toolArgsMatch`
+- **Metric**: `latency`, `cost`, `tokenCount`
+- **Safety**: `safetyKeywords`, `noHallucinatedNumbers`
 
 ### LLM graders
-Use an LLM to judge quality. Examples: `llmRubric`, `factuality`, `llmClassify`. These require a judge configuration.
+Use an LLM judge to evaluate quality. Require a `judge` configuration:
+- `llmRubric` — Score against natural language criteria (1–4 scale)
+- `factuality` — Check factual consistency against a reference
+- `llmClassify` — Classify output into categories
 
 ### Composition operators
-Combine graders with boolean logic: `all` (conjunction), `any` (disjunction), `not` (negation). These do not short-circuit — they collect all results for complete reporting.
+Combine graders with boolean logic: `all` (conjunction), `any` (disjunction), `not` (negation). These do **not** short-circuit — all results are collected for complete reporting.
 
-Graders can also be composed with weighted scoring: apply multiple graders per case, weight their scores, and set pass thresholds.
+## Weighted Scoring
+
+Each grader in a suite's `defaultGraders` array can have a `weight`, `required` flag, and `threshold`:
+
+```typescript
+defaultGraders: [
+  { grader: contains("Paris"), weight: 0.3 },
+  { grader: latency(5000), weight: 0.2 },
+  { grader: llmRubric("Helpful response"), weight: 0.5 },
+]
+```
+
+The final case score is a weighted average. Required graders that fail cause an immediate score of 0 regardless of other graders. The case passes if the weighted score meets the pass threshold (default: 0.5, or the minimum of all configured grader thresholds).
+
+## Case Graders vs Suite Graders
+
+Cases can define their own graders, which **replace** (not merge with) the suite's `defaultGraders`. This makes each case self-contained and predictable.
 
 ## Gates
 
-Gates are quality thresholds that make eval runs actionable:
+Gates are quality thresholds that make eval runs actionable. Three gate types are available:
 
 ```typescript
 gates: {
-  minPassRate: 0.9,       // 90% of cases must pass
-  maxFailCount: 2,        // At most 2 failures allowed
-  requireCategories: {
-    "critical": 1.0,      // Critical cases must all pass
-  },
+  passRate: 0.9,       // 90% of cases must pass
+  maxCost: 1.50,       // Total run cost must not exceed $1.50
+  p95LatencyMs: 5000,  // 95th percentile latency under 5 seconds
 }
 ```
 
-Gates are checked after all grading completes. A failed gate means the run's `gateResult.pass` is `false` — useful for CI pipelines.
+All gates are optional. They are checked after all grading completes. A failed gate means the run's `gateResult.pass` is `false` — the CLI exits with code 1, useful for CI pipelines.
 
 ## Record-Replay (Fixtures)
 
@@ -80,7 +101,18 @@ The record-replay engine is the core differentiator:
 
 1. **Record**: Run in live mode with `--record` to capture target responses as fixtures
 2. **Replay**: Run in replay mode to grade from fixtures — no API calls, instant results
-3. **Invalidation**: Fixtures are keyed by a config hash. When your suite name or target version changes, fixtures are automatically invalidated
-4. **Staleness**: Fixtures older than the configured TTL generate warnings (or errors with `--strict-fixtures`)
+3. **Invalidation**: Fixtures are keyed by a config hash. When your suite name or case count changes, fixtures are automatically invalidated
+4. **Staleness**: Fixtures older than the configured TTL (default: 14 days) generate warnings (or errors with `--strict-fixtures`)
 
 This enables **$0 pre-push evals** — record once, replay thousands of times during development.
+
+## Case Categories
+
+Cases can be tagged with a category for organized reporting:
+
+```jsonl
+{"id": "greeting", "input": {"prompt": "hi"}, "category": "happy_path"}
+{"id": "empty-input", "input": {"prompt": ""}, "category": "edge_case"}
+```
+
+Built-in categories: `happy_path`, `edge_case`, `adversarial`, `multi_step`, `regression`. Run summaries include per-category pass rates.

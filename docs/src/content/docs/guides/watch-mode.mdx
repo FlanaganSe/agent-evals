@@ -3,4 +3,54 @@ title: Watch Mode
 description: Automatic re-running on file changes
 ---
 
-Coming soon: guide on watch mode configuration, performance tips, and IDE integration.
+## Usage
+
+Watch mode re-runs evals automatically when files change:
+
+```bash
+agent-eval-kit run --watch --mode=replay --suite=smoke
+```
+
+Short form:
+
+```bash
+agent-eval-kit run -w --mode=replay -s smoke
+```
+
+## What it watches
+
+Watch mode monitors files matching these extensions in your project directory:
+
+- `.ts`, `.js` — source and config files
+- `.jsonl` — case files
+- `.yaml`, `.yml` — case files
+
+Changes are debounced (300ms) to avoid redundant runs when multiple files are saved simultaneously.
+
+## Recommended workflow
+
+1. **Record fixtures once**: `agent-eval-kit record --suite=smoke`
+2. **Start watch mode**: `agent-eval-kit run -w --mode=replay -s smoke`
+3. **Edit your graders or cases** — results update automatically
+
+This gives you a tight feedback loop while developing graders or tuning thresholds, with zero API cost.
+
+## Combining with other flags
+
+Watch mode works with all `run` flags:
+
+```bash
+# Watch with verbose output
+agent-eval-kit run -w --mode=replay -s smoke -v
+
+# Watch with specific reporter
+agent-eval-kit run -w --mode=replay -s smoke -r json -o results.json
+
+# Watch with multiple trials
+agent-eval-kit run -w --mode=replay -s smoke -t 3
+```
+
+## Platform notes
+
+- **macOS/Windows**: Uses native `fs.watch` (no extra dependencies)
+- **Linux**: Uses `chokidar` (included as a dependency)

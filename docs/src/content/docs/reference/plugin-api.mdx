@@ -3,4 +3,133 @@ title: Plugin API
 description: API reference for plugin authors
 ---
 
-Coming soon: plugin hooks, lifecycle, and examples.
+## EvalPlugin interface
+
+```typescript
+import type { EvalPlugin } from "agent-eval-kit/plugin";
+
+interface EvalPlugin {
+  readonly name: string;     // required, non-empty
+  readonly version: string;  // required, non-empty
+  readonly graders?: Readonly<Record<string, GraderFn>>;
+  readonly hooks?: PluginHooks;
+}
+```
+
+## Grader functions
+
+Plugin graders follow the same `GraderFn` signature as built-in graders:
+
+```typescript
+type GraderFn = (
+  output: TargetOutput,
+  expected: CaseExpected | undefined,
+  context: GraderContext,
+) => Promise<GradeResult>;
+```
+
+### GraderContext
+
+```typescript
+interface GraderContext {
+  caseId: string;
+  suiteId: string;
+  mode: "live" | "replay" | "judge-only";
+  graderName: string;
+  judge?: JudgeCallFn;  // available if judge is configured
+}
+```
+
+The `judge` function is injected from the config, allowing plugin graders to use LLM judging without managing their own LLM client.
+
+### GradeResult
+
+```typescript
+interface GradeResult {
+  pass: boolean;
+  score: number;                       // 0–1
+  reason: string;
+  graderName: string;
+  metadata?: Record<string, unknown>;  // arbitrary data (e.g., judgeCost)
+}
+```
+
+## Lifecycle hooks
+
+```typescript
+interface PluginHooks {
+  readonly beforeRun?: (context: BeforeRunContext) => Promise<void>;
+  readonly afterTrial?: (trial: Trial, context: AfterTrialContext) => Promise<void>;
+  readonly afterRun?: (run: Run) => Promise<void>;
+}
+```
+
+### BeforeRunContext
+
+```typescript
+interface BeforeRunContext {
+  suiteId: string;
+  mode: "live" | "replay" | "judge-only";
+  caseCount: number;
+  trialCount: number;
+}
+```
+
+### AfterTrialContext
+
+```typescript
+interface AfterTrialContext {
+  suiteId: string;
+  completedCount: number;
+  totalCount: number;
+}
+```
+
+## Hook execution order
+
+- Hooks execute sequentially in plugin registration order
+- `beforeRun` and `afterRun` errors **propagate** — a failing hook stops the run
+- `afterTrial` errors are **caught and logged** — they don't interrupt the run
+
+## Validation rules
+
+The config loader validates plugins at load time:
+
+| Rule | Error |
+|------|-------|
+| Empty `name` | `"Plugin missing required 'name' field"` |
+| Empty `version` | `"Plugin '<name>' missing required 'version' field"` |
+| Duplicate grader name | `"Duplicate grader name '<name>' from plugin '<plugin>' (already registered by '<other>')"` |
+
+## Package exports
+
+Plugin types are available from the `agent-eval-kit/plugin` subpath:
+
+```typescript
+import type {
+  EvalPlugin,
+  PluginHooks,
+  BeforeRunContext,
+  AfterTrialContext,
+} from "agent-eval-kit/plugin";
+```
+
+## Example: timing plugin
+
+```typescript
+import type { EvalPlugin } from "agent-eval-kit/plugin";
+
+export const timingPlugin: EvalPlugin = {
+  name: "timing",
+  version: "1.0.0",
+  hooks: {
+    beforeRun: async (ctx) => {
+      console.time(`suite:${ctx.suiteId}`);
+    },
+    afterRun: async (run) => {
+      console.timeEnd(`suite:${run.suiteId}`);
+      console.log(`Total cost: $${run.summary.totalCost.toFixed(4)}`);
+    },
+  },
+};
+```

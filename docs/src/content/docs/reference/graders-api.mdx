@@ -1,9 +1,11 @@
 ---
 title: Graders API
-description: Reference for all built-in graders
+description: Reference for all 20 built-in graders
 ---
 
 agent-eval-kit ships 20 built-in graders across three tiers: **deterministic** (pure functions — fast, free, reproducible), **LLM** (require a judge configuration), and **composition** (combine other graders with boolean logic).
+
+All graders are imported from `agent-eval-kit/graders`.
 
 ## Text Graders
 
@@ -49,7 +51,7 @@ exactMatch("Hello World", { trim: false, caseSensitive: false })
 
 ### `regex`
 
-Tests output against a regular expression. Accepts a string or RegExp.
+Tests output against a regular expression. Accepts a string or RegExp. The regex is compiled at factory time — errors are caught early, not at grade time.
 
 ```typescript
 regex(/\d{3}-\d{4}/)
@@ -62,7 +64,7 @@ regex("\\d+\\.\\d{2}", { flags: "i" })
 
 ### `jsonSchema`
 
-Parses output text as JSON and validates against a Zod schema. Fails if text is not valid JSON or does not match the schema.
+Parses output text as JSON and validates against a Zod schema. Fails if text is empty, not valid JSON, or does not match the schema.
 
 ```typescript
 import { z } from "zod";
@@ -74,7 +76,7 @@ jsonSchema(z.object({ name: z.string(), age: z.number() }))
 
 ### `toolCalled`
 
-Checks that a specific tool was invoked in the output tool calls.
+Checks that a specific tool was invoked in the output tool calls. No tool calls = fail.
 
 ```typescript
 toolCalled("search")
@@ -82,7 +84,7 @@ toolCalled("search")
 
 ### `toolNotCalled`
 
-Checks that a specific tool was NOT invoked.
+Checks that a specific tool was NOT invoked. No tool calls = pass.
 
 ```typescript
 toolNotCalled("deleteAll")
@@ -93,19 +95,22 @@ toolNotCalled("deleteAll")
 Checks that tool calls match an expected sequence. Four modes available.
 
 ```typescript
-toolSequence(["search", "summarize"])                  // unordered (default)
-toolSequence(["search", "summarize"], "strict")        // exact order
-toolSequence(["search"], "subset")                     // expected tools appear in actual
+toolSequence(["search", "summarize"])                     // unordered (default)
+toolSequence(["search", "summarize"], "strict")           // exact order and count
+toolSequence(["search"], "subset")                        // expected tools appear in actual
 toolSequence(["search", "summarize", "save"], "superset") // actual tools appear in expected
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `mode` | string | `"unordered"` | Match mode: `strict`, `unordered`, `subset`, `superset` |
+| Mode | Description |
+|------|-------------|
+| `unordered` | Same tools, any order, same count (default) |
+| `strict` | Exact order and count |
+| `subset` | All expected tools appear in actual (actual may have extras) |
+| `superset` | All actual tools appear in expected (actual did fewer steps) |
 
 ### `toolArgsMatch`
 
-Checks that a tool call's arguments match expected values.
+Checks that a tool call's arguments match expected values. Matches the first tool call with the given name.
 
 ```typescript
 toolArgsMatch("search", { query: "weather" })                    // subset (default)
@@ -113,15 +118,17 @@ toolArgsMatch("search", { query: "weather" }, "exact")           // deep equalit
 toolArgsMatch("search", { query: "weather" }, "contains")        // strings use .includes()
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `mode` | string | `"subset"` | Match mode: `exact`, `subset`, `contains` |
+| Mode | Description |
+|------|-------------|
+| `subset` | Every expected key exists in actual with matching value (default) |
+| `exact` | Deep equality of entire args object |
+| `contains` | Like subset, but string values use `.includes()` for natural language args |
 
 ## Metric Graders
 
 ### `latency`
 
-Checks that response latency (`output.latencyMs`) is within the allowed threshold.
+Checks that response latency (`output.latencyMs`) is within the allowed threshold. Always evaluates since `latencyMs` is required.
 
 ```typescript
 latency(5000)
@@ -129,7 +136,7 @@ latency(5000)
 
 ### `cost`
 
-Checks that response cost (`output.cost`) is within budget. Skips if cost is not reported.
+Checks that response cost (`output.cost`) is within budget. Skips gracefully (pass) if `output.cost` is not reported.
 
 ```typescript
 cost(0.05)
@@ -137,7 +144,7 @@ cost(0.05)
 
 ### `tokenCount`
 
-Checks that total token usage (input + output) is within the allowed limit. Skips if token usage is not reported.
+Checks that total token usage (input + output) is within the allowed limit. Skips gracefully (pass) if `output.tokenUsage` is not reported.
 
 ```typescript
 tokenCount(4096)
@@ -155,7 +162,7 @@ safetyKeywords(["guaranteed returns", "buy now", "act fast"])
 
 ### `noHallucinatedNumbers`
 
-Checks that numbers in output text are grounded in tool call results. Catches fabricated numbers — the most dangerous agent failure mode.
+Checks that numbers in output text are grounded in tool call results. Catches fabricated statistics — one of the most dangerous agent failure modes.
 
 ```typescript
 noHallucinatedNumbers()
@@ -167,19 +174,23 @@ noHallucinatedNumbers({ tolerance: 0.01, skipSmallIntegers: false })
 | `tolerance` | number | `0.005` | Relative tolerance for matching (0.005 = 0.5%) |
 | `skipSmallIntegers` | boolean | `true` | Skip integers with absolute value < 10 |
 
-Always skips year-like numbers (1900–2100). Score is proportional: `(checked - hallucinated) / checked`.
+Always skips year-like numbers (1900–2100). Score is proportional: `(checked - hallucinated) / checked`. Returns metadata: `{ hallucinated: number[], totalChecked: number }`.
 
 ## LLM Graders
 
-These require a `judge` configuration in your eval config. See [Configuration](/reference/config/) for setup.
+These require a `judge` configuration in your eval config. See [LLM Judge Guide](/agent-eval-kit/guides/llm-judge/) for setup.
 
 ### `llmRubric`
 
-Scores agent output against natural language criteria using an LLM judge. Judge scores 1–4 (poor to excellent).
+Scores agent output against natural language criteria using an LLM judge. Judge scores 1–4 (poor to excellent), normalized to 0.25–1.0.
 
 ```typescript
+// String shorthand
 llmRubric("Response is helpful, accurate, and well-formatted")
-llmRubric("Answer is concise", {
+
+// With options
+llmRubric({
+  criteria: "Answer is concise",
   passThreshold: 0.75,
   examples: [
     { output: "Yes.", score: 4, reasoning: "Direct and concise" },
@@ -190,14 +201,15 @@ llmRubric("Answer is concise", {
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `criteria` | string | (required) | Natural language evaluation criteria |
 | `passThreshold` | number | `0.75` | Score threshold for passing (0–1) |
-| `examples` | array | — | Few-shot calibration examples (output, score 1–4, reasoning) |
+| `examples` | array | — | Few-shot calibration examples (`{ output, score: 1\|2\|3\|4, reasoning }`) |
 
-Default pass threshold of 0.75 maps to a judge score of 3 or higher.
+Default pass threshold of 0.75 maps to a judge score of 3 ("Good") or higher.
 
 ### `factuality`
 
-Specialized LLM judge that evaluates factual consistency against a reference. Requires `expected.text` as the ground truth.
+Specialized LLM judge that evaluates factual consistency against a reference. **Requires `expected.text`** on the case — fails immediately without it.
 
 ```typescript
 factuality()
@@ -208,32 +220,42 @@ factuality({ passThreshold: 0.9 })
 |--------|------|---------|-------------|
 | `passThreshold` | number | `0.75` | Score threshold for passing (0–1) |
 
-Evaluates accuracy, completeness, and absence of fabrication.
+Evaluates accuracy, completeness, and absence of fabrication using a built-in rubric with 3 calibration examples.
 
 ### `llmClassify`
 
-Classifies agent output into one of N categories using an LLM judge. Passes when classification matches `expected.metadata.classification`.
+Classifies agent output into one of N categories using an LLM judge. Requires at least 2 categories.
 
 ```typescript
 llmClassify({
-  helpful: "Answers the question directly",
-  unhelpful: "Does not answer the question",
+  categories: {
+    helpful: "Answers the question directly",
+    unhelpful: "Does not answer the question",
+  },
 })
-llmClassify(
-  { positive: "Positive sentiment", negative: "Negative sentiment" },
-  { criteria: "Classify based on overall tone" },
-)
+
+llmClassify({
+  categories: {
+    positive: "Positive sentiment",
+    negative: "Negative sentiment",
+    neutral: "Neutral sentiment",
+  },
+  criteria: "Classify based on overall tone",
+})
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `criteria` | string | — | Additional classification instructions |
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `categories` | `Record<string, string>` | yes | Category name → description (min 2) |
+| `criteria` | string | no | Additional classification instructions |
 
-If no expected classification is set on the case, runs in classification-only mode (always passes).
+Pass condition: If `expected.metadata.classification` is set on the case, the judge's classification must match. If not set, runs in classification-only mode (always passes).
+
+Returns metadata: `{ classification, reasoning, confidence, judgeCost }`.
 
 ## Composition Operators
 
-Combine graders with boolean logic. These operators do not short-circuit — they collect all results for complete reporting.
+Combine graders with boolean logic. These operators do **not** short-circuit — they collect all results for complete reporting.
 
 ### `all`
 
@@ -243,7 +265,7 @@ Conjunction: all graders must pass. Score is the minimum of all scores.
 all([contains("Paris"), toolCalled("search"), latency(5000)])
 ```
 
-Empty list returns pass (vacuous truth).
+Empty list returns pass (vacuous truth, score 1.0).
 
 ### `any`
 
@@ -253,11 +275,11 @@ Disjunction: at least one grader must pass. Score is the maximum of all scores.
 any([contains("capital of France"), contains("Paris")])
 ```
 
-Empty list returns fail.
+Empty list returns fail (score 0.0).
 
 ### `not`
 
-Negation: inverts a grader's result. Score becomes `1 - original`.
+Negation: inverts a grader's result. Score becomes `1 - original`. graderName becomes `not(<inner>)`.
 
 ```typescript
 not(contains("I don't know"))
@@ -265,12 +287,14 @@ not(contains("I don't know"))
 
 ## Weighted Scoring
 
-Apply multiple graders per case with weights. The final score is a weighted average. A case passes if the weighted score meets the pass threshold (default: 0.5).
+Apply multiple graders per case with weights and a required flag. The final score is a weighted average. A case passes if the weighted score meets the pass threshold (default: 0.5).
 
 ```typescript
-graders: [
+defaultGraders: [
   { grader: contains("hello"), weight: 0.3 },
-  { grader: latency(5000), weight: 0.2 },
+  { grader: latency(5000), weight: 0.2, required: true },
   { grader: llmRubric("Helpful response"), weight: 0.5 },
 ]
 ```
+
+Required graders that fail cause an immediate score of 0 regardless of other graders.

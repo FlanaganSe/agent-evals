@@ -5,7 +5,7 @@ description: Run evals in your CI pipeline with quality gates
 
 ## GitHub Actions
 
-Add evals to your CI pipeline with this workflow:
+Add evals to your CI pipeline. The `init` wizard can generate this workflow for you (`agent-eval-kit init`).
 
 ```yaml
 # .github/workflows/evals.yml
@@ -31,11 +31,27 @@ jobs:
 
       # Replay from recorded fixtures (instant, $0)
       - name: Run evals
-        run: pnpm agent-eval-kit run --mode=replay --suite=smoke
+        run: pnpm agent-eval-kit run --mode=replay
+```
 
-      # Or run live with strict fixtures
+### With JUnit reporting
+
+```yaml
+      - name: Run evals
+        run: pnpm agent-eval-kit run --mode=replay -r junit -o results.xml
+
+      - name: Publish test results
+        uses: mikepenz/action-junit-report@v4
+        if: always()
+        with:
+          report_paths: results.xml
+```
+
+### With strict fixtures
+
+```yaml
       - name: Run evals (strict)
-        run: pnpm agent-eval-kit run --mode=replay --strict-fixtures --suite=smoke
+        run: pnpm agent-eval-kit run --mode=replay --strict-fixtures
 ```
 
 ## Quality gates in CI
@@ -45,33 +61,47 @@ Gates determine the exit code. When a gate fails, `agent-eval-kit run` exits wit
 ```typescript
 // eval.config.ts
 gates: {
-  minPassRate: 0.95,     // 95% pass rate required
-  maxFailCount: 2,       // At most 2 failures
-  requireCategories: {
-    critical: 1.0,       // 100% for critical cases
-  },
+  passRate: 0.95,       // 95% pass rate required
+  maxCost: 2.00,        // Total run cost under $2
+  p95LatencyMs: 5000,   // 95th percentile latency under 5s
 }
 ```
+
+## GitHub Step Summary
+
+In GitHub Actions, eval results are automatically written to `$GITHUB_STEP_SUMMARY` when the environment variable is present. This shows formatted results directly in the PR checks UI without any additional configuration.
 
 ## Pre-push hooks
 
 Run evals before every push:
 
 ```bash
-# Install git hooks
+# Auto-detect your hook manager and install
 agent-eval-kit install-hooks
+
+# Or specify a manager
+agent-eval-kit install-hooks --manager=husky
 ```
 
-This adds a pre-push hook that runs `agent-eval-kit run --mode=replay`. Failed gates block the push.
+Supported hook managers:
+- **Husky** — creates/appends `.husky/pre-push`
+- **Lefthook** — adds to `lefthook.yml`
+- **simple-git-hooks** — adds to `package.json`
+- **Raw git hook** — creates `.git/hooks/pre-push`
 
-## Comparing across branches
+The hook runs `agent-eval-kit run --mode=replay --quiet`. Failed gates block the push. All installers are idempotent.
+
+## Comparing across runs
 
 ```bash
-# On your PR branch, after running evals:
+# After running evals on your PR branch
 agent-eval-kit compare --base=<main-run-id> --compare=<pr-run-id>
+
+# Fail CI if regressions are detected
+agent-eval-kit compare --base=<main-run-id> --compare=<pr-run-id> --fail-on-regression
 ```
 
-The comparison highlights regressions, improvements, and score deltas.
+The comparison highlights regressions, improvements, score deltas, per-grader changes, and per-category breakdowns.
 
 ## Recording fixtures in CI
 
@@ -80,7 +110,7 @@ For the initial fixture recording, run in live mode once:
 ```bash
 # Record fixtures (requires API keys)
 OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-  agent-eval-kit run --mode=live --record --suite=smoke
+  agent-eval-kit record --suite=smoke
 ```
 
 Commit the `.eval-fixtures/` directory to your repository. Subsequent CI runs use replay mode.
@@ -88,6 +118,7 @@ Commit the `.eval-fixtures/` directory to your repository. Subsequent CI runs us
 ## Tips
 
 - **Commit fixtures**: Check `.eval-fixtures/` into git for reproducible CI runs
-- **Use `targetVersion`**: Bump the version when your agent changes significantly to invalidate old fixtures
+- **Use `targetVersion`**: Bump the version when your agent changes to invalidate old fixtures
 - **Separate suites**: Use a fast `smoke` suite for pre-push and a thorough `full` suite for CI
 - **Cache the judge cache**: The `.eval-cache/` directory can be cached between CI runs to avoid redundant LLM calls
+- **Cost estimation**: Use `--confirm-cost` to preview cost before live runs

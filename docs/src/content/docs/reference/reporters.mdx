@@ -1,6 +1,103 @@
 ---
 title: Reporters
-description: Output format reference
+description: Output format reference for all built-in reporters
 ---
 
-Coming soon: reference for console, JSON, JUnit, and Markdown reporters.
+## Overview
+
+Reporters format eval results for different contexts. agent-eval-kit ships four built-in reporters.
+
+## Console (default)
+
+Human-readable terminal output with color-coded pass/fail indicators.
+
+```bash
+agent-eval-kit run --suite=smoke
+agent-eval-kit run --suite=smoke -r console
+```
+
+Features:
+- Per-case status with pass/fail icon, latency, and cost
+- Multi-trial display: `N/M passed` with Wilson confidence interval
+- LLM reasoning (truncated to 200 chars in verbose mode)
+- Judge cost aggregation
+- Gate result with inline failure reasons
+- Color-coded pass rates: green (&ge;90%), yellow (&ge;70%), red (below 70%)
+
+Use `--verbose` for full grader details and LLM reasoning.
+
+## JSON
+
+Outputs the complete `Run` object as pretty-printed JSON. This is the full data model — every trial, grade, score, and metadata field.
+
+```bash
+agent-eval-kit run --suite=smoke -r json
+agent-eval-kit run --suite=smoke -r json -o results.json
+```
+
+The JSON structure matches the `Run` type:
+
+```typescript
+{
+  schemaVersion: "1.0.0",
+  id: string,
+  suiteId: string,
+  mode: "live" | "replay" | "judge-only",
+  trials: Trial[],
+  summary: RunSummary,
+  timestamp: string,
+  configHash: string,
+  frameworkVersion: string,
+}
+```
+
+## JUnit XML
+
+Standard JUnit XML format for CI tool integration (Jenkins, GitHub Actions, etc.).
+
+```bash
+agent-eval-kit run --suite=smoke -r junit -o results.xml
+```
+
+- Groups test cases by case ID
+- Distinguishes between failures (grader failed) and errors (runtime exception)
+- Strips XML 1.0 illegal control characters
+- Writes to file when `--output` is specified
+
+## Markdown
+
+Formatted markdown tables suitable for PR comments or documentation.
+
+```bash
+agent-eval-kit run --suite=smoke -r markdown
+agent-eval-kit run --suite=smoke -r markdown -o results.md
+```
+
+Includes a summary table, per-case result table, and gate status section.
+
+## Using multiple reporters
+
+Configure multiple reporters in your config file:
+
+```typescript
+export default defineConfig({
+  reporters: [
+    "console",
+    { reporter: "json", output: "results.json" },
+    { reporter: "junit", output: "results.xml" },
+  ],
+  suites: [/* ... */],
+});
+```
+
+Or override via CLI:
+
+```bash
+agent-eval-kit run --suite=smoke -r json -o results.json
+```
+
+The CLI `--reporter` flag overrides the config's reporter list.
+
+## GitHub Actions integration
+
+In GitHub Actions, run results are automatically written to `$GITHUB_STEP_SUMMARY` when the environment variable is set, giving you formatted results directly in the PR checks UI.
