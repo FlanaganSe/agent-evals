@@ -14,7 +14,7 @@ export function tokenCount(maxTokens: number): GraderFn {
 			};
 		}
 
-		const total = output.tokenUsage.input + output.tokenUsage.output;
+		const total = (output.tokenUsage.input ?? 0) + (output.tokenUsage.output ?? 0);
 		const pass = total <= maxTokens;
 		return {
 			pass,

@@ -3,8 +3,8 @@ import { z } from "zod";
 // ─── Leaf types ───────────────────────────────────────────────────────────────
 
 export const TokenUsageSchema = z.strictObject({
-	input: z.number().int().nonnegative(),
-	output: z.number().int().nonnegative(),
+	input: z.number().int().nonnegative().optional(),
+	output: z.number().int().nonnegative().optional(),
 });
 
 export const ToolCallSchema = z.strictObject({

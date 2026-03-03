@@ -29,6 +29,21 @@ describe("TokenUsageSchema", () => {
 		const result = TokenUsageSchema.safeParse({ input: 1.5, output: 200 });
 		expect(result.success).toBe(false);
 	});
+
+	it("accepts partial token usage (input only)", () => {
+		const result = TokenUsageSchema.safeParse({ input: 100 });
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts partial token usage (output only)", () => {
+		const result = TokenUsageSchema.safeParse({ output: 200 });
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts empty token usage", () => {
+		const result = TokenUsageSchema.safeParse({});
+		expect(result.success).toBe(true);
+	});
 });
 
 describe("ToolCallSchema", () => {
