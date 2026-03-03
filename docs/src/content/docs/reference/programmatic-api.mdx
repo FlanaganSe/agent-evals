@@ -84,6 +84,7 @@ import {
   formatJsonReport,
   formatJunitXml,
   formatMarkdownReport,
+  formatMarkdownSummary,
 } from "agent-eval-kit";
 
 // Console (human-readable)
@@ -97,6 +98,9 @@ const xml = formatJunitXml(run);
 
 // Markdown tables
 const md = formatMarkdownReport(run);
+
+// Markdown summary (compact, suitable for PR comments)
+const summary = formatMarkdownSummary(run);
 ```
 
 ## Judge caching
@@ -125,6 +129,33 @@ const stats = await judgeCacheStats();
 // stats: { entries: number, totalBytes: number }
 ```
 
+## Run IDs
+
+```typescript
+import { generateRunId } from "agent-eval-kit";
+
+// Generate a timestamped run ID: run-YYYYMMDD-HHmmss-XXXX
+const id = generateRunId();
+// e.g. "run-20260302-143022-a7f3"
+
+// Optionally pass a Date for deterministic IDs in tests
+const id = generateRunId(new Date("2026-01-15T10:30:00Z"));
+```
+
+## Rate limiting
+
+```typescript
+import { createTokenBucketLimiter } from "agent-eval-kit";
+
+const limiter = createTokenBucketLimiter({ maxRequestsPerMinute: 60 });
+
+// Acquire a token before each request (waits if rate-limited)
+await limiter.acquire(signal);
+
+// Clean up when done
+limiter.dispose();
+```
+
 ## Cost estimation
 
 ```typescript
@@ -139,10 +170,14 @@ Does not estimate dollar cost — returns call counts so you can calculate based
 ## Statistics
 
 ```typescript
-import { computeAllTrialStats, wilsonInterval } from "agent-eval-kit";
+import { computeAllTrialStats, computeTrialStats, wilsonInterval } from "agent-eval-kit";
 
 // Compute per-case trial statistics (returns undefined if trialCount <= 1)
 const stats = computeAllTrialStats(trials, trialCount);
+
+// Compute stats for a single case across trials
+const caseStats = computeTrialStats(trials, "case-id");
+// caseStats: { trialCount, passCount, failCount, errorCount, passRate, meanScore, scoreStdDev, ci95Low, ci95High, flaky }
 
 // Compute a Wilson score interval
 const interval = wilsonInterval(successes, total, 1.96);
