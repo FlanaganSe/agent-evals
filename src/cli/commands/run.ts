@@ -54,6 +54,7 @@ export function buildRunOptions(
 		readonly "run-id"?: string | undefined;
 		readonly "update-fixtures"?: boolean | undefined;
 		readonly "no-progress"?: boolean | undefined;
+		readonly "no-color"?: boolean | undefined;
 		readonly quiet?: boolean | undefined;
 	},
 	configDefaults: ValidatedConfig["run"],
@@ -83,7 +84,7 @@ export function buildRunOptions(
 	// Add progress plugin automatically unless disabled
 	const allPlugins = [...(plugins ?? [])];
 	if (!args.quiet && !args["no-progress"]) {
-		allPlugins.push(createProgressPlugin());
+		allPlugins.push(createProgressPlugin({ noColor: args["no-color"] ?? false }));
 	}
 
 	return {

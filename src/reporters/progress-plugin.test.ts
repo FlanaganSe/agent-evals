@@ -16,7 +16,7 @@ function createMockStream(isTTY: boolean): Writable & { chunks: string[]; isTTY:
 	return stream;
 }
 
-const mockTrial: Trial = {
+const passTrial: Trial = {
 	caseId: "H01",
 	status: "pass",
 	output: { text: "ok", latencyMs: 10 },
@@ -25,8 +25,26 @@ const mockTrial: Trial = {
 	durationMs: 10,
 };
 
+const failTrial: Trial = {
+	caseId: "H02",
+	status: "fail",
+	output: { text: "bad", latencyMs: 250 },
+	grades: [],
+	score: 0.3,
+	durationMs: 250,
+};
+
+const errorTrial: Trial = {
+	caseId: "H03",
+	status: "error",
+	output: { text: "Target error: timeout", latencyMs: 5000 },
+	grades: [],
+	score: 0,
+	durationMs: 5000,
+};
+
 describe("createProgressPlugin", () => {
-	it("writes progress to TTY stream", async () => {
+	it("writes suite header on beforeRun", async () => {
 		const stream = createMockStream(true);
 		const plugin = createProgressPlugin({ stream });
 
@@ -47,9 +65,9 @@ describe("createProgressPlugin", () => {
 		expect(plugin.hooks).toBeUndefined();
 	});
 
-	it("updates progress after each trial", async () => {
+	it("prints per-trial result line with status and counter", async () => {
 		const stream = createMockStream(true);
-		const plugin = createProgressPlugin({ stream });
+		const plugin = createProgressPlugin({ stream, noColor: true });
 
 		await plugin.hooks?.beforeRun?.({
 			suiteId: "smoke",
@@ -58,13 +76,70 @@ describe("createProgressPlugin", () => {
 			trialCount: 3,
 		});
 
-		await plugin.hooks?.afterTrial?.(mockTrial, {
+		await plugin.hooks?.afterTrial?.(passTrial, {
 			suiteId: "smoke",
 			completedCount: 1,
 			totalCount: 3,
 		});
 
-		expect(stream.chunks.some((c) => c.includes("1/3"))).toBe(true);
+		const output = stream.chunks.join("");
+		expect(output).toContain("✓ H01");
+		expect(output).toContain("10ms");
+		expect(output).toContain("1/3 (33%)");
+	});
+
+	it("shows distinct symbols for pass, fail, and error", async () => {
+		const stream = createMockStream(true);
+		const plugin = createProgressPlugin({ stream, noColor: true });
+
+		await plugin.hooks?.beforeRun?.({
+			suiteId: "smoke",
+			mode: "live",
+			caseCount: 3,
+			trialCount: 3,
+		});
+
+		await plugin.hooks?.afterTrial?.(passTrial, {
+			suiteId: "smoke",
+			completedCount: 1,
+			totalCount: 3,
+		});
+		await plugin.hooks?.afterTrial?.(failTrial, {
+			suiteId: "smoke",
+			completedCount: 2,
+			totalCount: 3,
+		});
+		await plugin.hooks?.afterTrial?.(errorTrial, {
+			suiteId: "smoke",
+			completedCount: 3,
+			totalCount: 3,
+		});
+
+		const output = stream.chunks.join("");
+		expect(output).toContain("✓ H01");
+		expect(output).toContain("✗ H02");
+		expect(output).toContain("! H03");
+	});
+
+	it("formats latency as seconds when >= 1000ms", async () => {
+		const stream = createMockStream(true);
+		const plugin = createProgressPlugin({ stream, noColor: true });
+
+		await plugin.hooks?.beforeRun?.({
+			suiteId: "smoke",
+			mode: "live",
+			caseCount: 1,
+			trialCount: 1,
+		});
+
+		await plugin.hooks?.afterTrial?.(errorTrial, {
+			suiteId: "smoke",
+			completedCount: 1,
+			totalCount: 1,
+		});
+
+		const output = stream.chunks.join("");
+		expect(output).toContain("5.0s");
 	});
 
 	it("does not erase progress on afterRun", async () => {
@@ -78,7 +153,7 @@ describe("createProgressPlugin", () => {
 			trialCount: 1,
 		});
 
-		await plugin.hooks?.afterTrial?.(mockTrial, {
+		await plugin.hooks?.afterTrial?.(passTrial, {
 			suiteId: "smoke",
 			completedCount: 1,
 			totalCount: 1,
@@ -126,23 +201,25 @@ describe("createProgressPlugin", () => {
 		expect(stream.chunks.some((c) => c.includes("(replay)"))).toBe(true);
 	});
 
-	it("shows correct percentage", async () => {
+	it("includes ANSI color codes when noColor is false", async () => {
 		const stream = createMockStream(true);
-		const plugin = createProgressPlugin({ stream });
+		const plugin = createProgressPlugin({ stream, noColor: false });
 
 		await plugin.hooks?.beforeRun?.({
 			suiteId: "smoke",
 			mode: "live",
-			caseCount: 4,
-			trialCount: 4,
+			caseCount: 1,
+			trialCount: 1,
 		});
 
-		await plugin.hooks?.afterTrial?.(mockTrial, {
+		await plugin.hooks?.afterTrial?.(passTrial, {
 			suiteId: "smoke",
-			completedCount: 2,
-			totalCount: 4,
+			completedCount: 1,
+			totalCount: 1,
 		});
 
-		expect(stream.chunks.some((c) => c.includes("50%"))).toBe(true);
+		const output = stream.chunks.join("");
+		// Green color code for pass
+		expect(output).toContain("\x1b[32m✓\x1b[0m");
 	});
 });

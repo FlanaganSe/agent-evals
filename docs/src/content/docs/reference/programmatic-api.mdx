@@ -173,9 +173,12 @@ await watcher.close();
 ```typescript
 import { createProgressPlugin } from "agent-eval-kit";
 
-const progress = createProgressPlugin();
+const progress = createProgressPlugin({ noColor: false });
 // Use as a plugin: plugins: [progress]
-// Writes N/M (X%) to stderr on TTY
+// Streams per-trial results to stderr on TTY:
+//   ✓ case-id  420ms
+//   ✗ case-id  1.2s
+//   3/10 (30%)          ← counter line, overwritten each trial
 ```
 
 ## Graders

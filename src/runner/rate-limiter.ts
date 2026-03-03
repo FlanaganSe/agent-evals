@@ -31,7 +31,6 @@ export function createTokenBucketLimiter(options: TokenBucketOptions): RateLimit
 	}
 
 	timer = setInterval(processQueue, Math.max(10, intervalMs / 2));
-	timer.unref();
 
 	return {
 		acquire(signal?: AbortSignal): Promise<void> {
