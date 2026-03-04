@@ -43,6 +43,7 @@
 			"examples/**",
 			"!!**/dist",
 			"!!**/node_modules",
+			"!!**/.eval-cache",
 			"!!**/.eval-fixtures",
 			"!!**/.eval-runs"
 		]

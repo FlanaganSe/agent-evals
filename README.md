@@ -1,7 +1,7 @@
 # agent-eval-kit
 
 [![npm](https://img.shields.io/npm/v/agent-eval-kit)](https://www.npmjs.com/package/agent-eval-kit)
-[![tests](https://img.shields.io/badge/tests-676%20passed-brightgreen)](https://github.com/FlanaganSe/agent-eval-kit)
+[![tests](https://img.shields.io/badge/tests-737%20passed-brightgreen)](https://github.com/FlanaganSe/agent-eval-kit)
 [![license](https://img.shields.io/npm/l/agent-eval-kit)](LICENSE.md)
 
 > TypeScript-native eval framework for AI agent workflows. Record once, replay forever, grade instantly.

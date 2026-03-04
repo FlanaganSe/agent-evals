@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+.eval-cache/
 .eval-fixtures/
 .eval-runs/
 
