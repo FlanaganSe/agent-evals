@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { stat } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { defineCommand } from "citty";
 import pc from "picocolors";
 import { listRuns } from "../../storage/run-store.js";
@@ -36,7 +37,8 @@ export default defineCommand({
 		const suiteFilter = (args.suiteName as string | undefined) ?? args.suite;
 		const logger = createLogger(args);
 		const limit = parseIntArg(args.limit, "limit") ?? 10;
-		const allRuns = await listRuns(join(process.cwd(), ".eval-runs"));
+		const projectDir = await resolveProjectDir(args.config);
+		const allRuns = await listRuns(join(projectDir, ".eval-runs"));
 
 		const filtered = suiteFilter ? allRuns.filter((r) => r.suiteId === suiteFilter) : allRuns;
 
@@ -73,6 +75,14 @@ export default defineCommand({
 		}
 	},
 });
+
+async function resolveProjectDir(configArg?: string): Promise<string> {
+	if (!configArg) return process.cwd();
+	const resolved = resolve(configArg);
+	const s = await stat(resolved).catch(() => null);
+	if (s?.isFile()) return dirname(resolved);
+	return resolved;
+}
 
 function formatPassRate(rate: string, noColor?: boolean): string {
 	const label = `${rate}%`;

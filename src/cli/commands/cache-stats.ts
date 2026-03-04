@@ -8,9 +8,9 @@ import { globalArgs } from "../shared-args.js";
 export default defineCommand({
 	meta: { name: "stats", description: "Show cache statistics" },
 	args: globalArgs,
-	async run() {
+	async run({ args }) {
 		// Fixture stats
-		const fixtureDir = await resolveFixtureDir();
+		const fixtureDir = await resolveFixtureDir(args.config);
 		const fStats = await fixtureStats({ baseDir: fixtureDir });
 
 		const lines = ["Cache Stats", ""];

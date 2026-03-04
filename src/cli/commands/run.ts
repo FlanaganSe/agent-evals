@@ -10,6 +10,7 @@ import type {
 	ReporterConfigWithOptions,
 	ResolvedSuite,
 	Run,
+	RunMode,
 	RunOptions,
 } from "../../config/types.js";
 import { computeFixtureConfigHash } from "../../fixtures/config-hash.js";
@@ -34,6 +35,14 @@ import { createLogger } from "../logger.js";
 import { globalArgs } from "../shared-args.js";
 
 // ─── Exported helpers for unit testing and reuse by record command ───────────
+
+const VALID_MODES: readonly RunMode[] = ["live", "replay", "judge-only"] as const;
+
+export function parseMode(value: string | undefined): RunMode | undefined {
+	if (value === undefined) return undefined;
+	if (VALID_MODES.includes(value as RunMode)) return value as RunMode;
+	throw new ConfigError(`--mode must be one of ${VALID_MODES.join(", ")}, got '${value}'`);
+}
 
 export function parseIntArg(value: string | undefined, name: string): number | undefined {
 	if (value === undefined) return undefined;
@@ -70,7 +79,7 @@ export function buildRunOptions(
 	const isUpdateFixtures = args["update-fixtures"] ?? false;
 	const mode = isUpdateFixtures
 		? "live"
-		: ((args.mode ?? configDefaults.defaultMode ?? "replay") as RunOptions["mode"]);
+		: (parseMode(args.mode) ?? configDefaults.defaultMode ?? "replay");
 	const record = isUpdateFixtures || (args.record ?? false);
 
 	const configHash = computeFixtureConfigHash(suite);
@@ -216,7 +225,7 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 		if (args["confirm-cost"]) {
 			for (const suite of suites) {
 				const estimate = estimateCost(suite, {
-					mode: (args.mode ?? validatedConfig.run.defaultMode) as RunOptions["mode"],
+					mode: parseMode(args.mode) ?? validatedConfig.run.defaultMode,
 					trials: parseIntArg(args.trials, "trials"),
 				});
 				if (estimate.judgeCalls > 0 || estimate.targetCalls > 0) {
@@ -288,15 +297,23 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 			);
 			const run = await runSuite(suite, options);
 
-			// Dispatch reporters
-			await dispatchReporters(run, args, validatedConfig.reporters);
-
-			// Write GitHub Actions summary
-			await writeGitHubSummary(run);
-
-			// Save run artifact
+			// Save run artifact FIRST — reporters and summary are non-critical
 			const savedPath = await saveRun(run, runDir);
 			logger.info(`Run saved: ${savedPath}`);
+
+			// Dispatch reporters — output failures are errors, display failures are warnings
+			try {
+				await dispatchReporters(run, args, validatedConfig.reporters);
+				await writeGitHubSummary(run);
+			} catch (reporterErr) {
+				const msg = reporterErr instanceof Error ? reporterErr.message : String(reporterErr);
+				if (args.output) {
+					logger.error(`Reporter output failed: ${msg}`);
+					worstExitCode = Math.max(worstExitCode, 3);
+				} else {
+					logger.warn(`Reporter error: ${msg}`);
+				}
+			}
 
 			// Determine exit code for this suite
 			if (run.summary.aborted) {
@@ -411,6 +428,9 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 	const cwd = process.cwd();
 	const watchPaths = [cwd];
 
+	// Shared abort controller — Ctrl+C aborts in-flight runs AND closes watcher
+	const controller = new AbortController();
+
 	const watcher = createFileWatcher({
 		paths: watchPaths,
 		debounceMs: 300,
@@ -420,7 +440,7 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 	logger.info("[watch] Watching for changes... (press Ctrl+C to stop)");
 
 	// Initial run
-	await runOnce(args, logger);
+	await runOnce(args, logger, controller.signal);
 
 	let isRunning = false;
 	let pendingRerun = false;
@@ -451,7 +471,7 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 				process.stdout.write("\x1bc");
 			}
 
-			await runOnce(args, logger);
+			await runOnce(args, logger, controller.signal);
 			logger.info("\n[watch] Watching for changes...");
 
 			// If changes arrived during the run, re-run once more
@@ -461,7 +481,7 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 				if (process.stdout.isTTY) {
 					process.stdout.write("\x1bc");
 				}
-				await runOnce(args, logger);
+				await runOnce(args, logger, controller.signal);
 				logger.info("\n[watch] Watching for changes...");
 			}
 		} finally {
@@ -473,6 +493,9 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 	await new Promise<void>((resolve) => {
 		const handleSignal = (): void => {
 			logger.info("\n[watch] Stopped.");
+			controller.abort();
+			process.off("SIGINT", handleSignal);
+			process.off("SIGTERM", handleSignal);
 			watcher.close().then(resolve);
 		};
 		process.on("SIGINT", handleSignal);
@@ -483,14 +506,16 @@ async function executeWatch(args: ExecuteRunArgs): Promise<void> {
 async function runOnce(
 	args: ExecuteRunArgs,
 	logger: ReturnType<typeof createLogger>,
+	signal?: AbortSignal,
 ): Promise<void> {
 	try {
 		const validatedConfig = await loadConfigSafe(args.config);
+		const runDir = join(validatedConfig.projectDir, ".eval-runs");
 		const suites = filterSuites(validatedConfig.suites, args.suite);
 
-		const controller = new AbortController();
-
 		for (const rawSuite of suites) {
+			if (signal?.aborted) return;
+
 			let suite = rawSuite;
 			if (args.filter) {
 				suite = filterCases(suite, args.filter);
@@ -500,7 +525,7 @@ async function runOnce(
 				args,
 				validatedConfig.run,
 				suite,
-				controller.signal,
+				signal ?? new AbortController().signal,
 				validatedConfig.fixtureDir,
 				undefined,
 				validatedConfig.judge?.call,
@@ -508,9 +533,14 @@ async function runOnce(
 				validatedConfig.plugins,
 			);
 			const run = await runSuite(suite, options);
+
+			// Save watch-mode runs for list/compare
+			await saveRun(run, runDir);
+
 			await dispatchReporters(run, args, validatedConfig.reporters);
 		}
 	} catch (err) {
+		if (signal?.aborted) return;
 		logger.error(err instanceof Error ? err.message : String(err));
 	}
 }

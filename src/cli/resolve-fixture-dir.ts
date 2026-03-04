@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { loadConfig } from "../config/loader.js";
 
 const DEFAULT_FIXTURE_DIR = ".eval-fixtures";
@@ -20,12 +21,32 @@ export function assertSafeFixtureDir(fixtureDir: string, cwd: string): void {
 /**
  * Resolves the fixture directory from config, falling back to the default
  * if no config is found or loading fails.
+ *
+ * Accepts the raw --config CLI value: a file path, a directory, or a stem.
+ * Derives cwd from the config path so relative fixtureDir resolves correctly.
  */
-export async function resolveFixtureDir(): Promise<string> {
+export async function resolveFixtureDir(configArg?: string): Promise<string> {
 	try {
-		const config = await loadConfig();
+		const options = await resolveConfigOptions(configArg);
+		const config = await loadConfig(options);
 		return config.fixtureDir;
 	} catch {
 		return DEFAULT_FIXTURE_DIR;
 	}
+}
+
+async function resolveConfigOptions(
+	configArg: string | undefined,
+): Promise<{ configPath?: string; cwd?: string } | undefined> {
+	if (!configArg) return undefined;
+	const resolved = resolve(configArg);
+	const s = await stat(resolved).catch(() => null);
+	if (s?.isFile()) {
+		return { configPath: resolved, cwd: dirname(resolved) };
+	}
+	if (s?.isDirectory()) {
+		return { cwd: resolved };
+	}
+	// Treat as stem or non-existent path — let loadConfig probe extensions
+	return { configPath: configArg };
 }

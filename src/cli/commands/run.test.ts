@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ResolvedSuite } from "../../config/types.js";
 import { ConfigError } from "../errors.js";
-import { buildRunOptions, parseIntArg } from "./run.js";
+import { buildRunOptions, parseIntArg, parseMode } from "./run.js";
 
 const mockTarget = async () => ({ text: "ok", latencyMs: 0 });
 const mockSignal = new AbortController().signal;
@@ -15,6 +15,29 @@ function makeSuite(overrides?: Partial<ResolvedSuite>): ResolvedSuite {
 		...overrides,
 	};
 }
+
+describe("parseMode", () => {
+	it("returns undefined for undefined input", () => {
+		expect(parseMode(undefined)).toBeUndefined();
+	});
+
+	it("accepts valid modes", () => {
+		expect(parseMode("live")).toBe("live");
+		expect(parseMode("replay")).toBe("replay");
+		expect(parseMode("judge-only")).toBe("judge-only");
+	});
+
+	it("throws ConfigError for invalid modes", () => {
+		expect(() => parseMode("foobar")).toThrow(ConfigError);
+		expect(() => parseMode("judge_only")).toThrow(ConfigError);
+		expect(() => parseMode("LIVE")).toThrow(ConfigError);
+		expect(() => parseMode("")).toThrow(ConfigError);
+	});
+
+	it("includes valid modes in error message", () => {
+		expect(() => parseMode("invalid")).toThrow(/live, replay, judge-only/);
+	});
+});
 
 describe("parseIntArg", () => {
 	it("returns undefined for undefined input", () => {
