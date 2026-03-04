@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
+import { FixtureMetaSchema, TargetOutputSchema } from "../config/schema.js";
 import type { TargetOutput } from "../config/types.js";
 import { VERSION } from "../index.js";
 
@@ -53,6 +55,12 @@ interface FixtureMeta {
 
 const FIXTURE_SCHEMA_VERSION = "1.0.0";
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+/** Validates the first JSONL line (metadata wrapper). */
+const FixtureMetaLineSchema = z.strictObject({ _meta: FixtureMetaSchema });
+
+/** Validates the second JSONL line (target output). */
+const FixtureDataLineSchema = z.strictObject({ output: TargetOutputSchema });
 
 /** Write a fixture entry for a case. Creates file if not exists, replaces if exists. */
 export async function writeFixture(
@@ -109,31 +117,39 @@ export async function readFixture(
 		return { status: "miss", reason: "not-found" };
 	}
 
-	let meta: FixtureMeta;
-	let data: { readonly output: TargetOutput };
+	let metaParsed: unknown;
+	let dataParsed: unknown;
 	try {
-		meta = JSON.parse(lines[0] as string) as FixtureMeta;
-		data = JSON.parse(lines[1] as string) as { readonly output: TargetOutput };
+		metaParsed = JSON.parse(lines[0] as string);
+		dataParsed = JSON.parse(lines[1] as string);
 	} catch {
 		return { status: "miss", reason: "not-found" };
 	}
 
-	// Validate required nested fields exist
-	if (typeof meta?._meta?.configHash !== "string" || typeof meta._meta.recordedAt !== "string") {
+	const metaResult = FixtureMetaLineSchema.safeParse(metaParsed);
+	if (!metaResult.success) {
 		return { status: "miss", reason: "not-found" };
 	}
 
+	const dataResult = FixtureDataLineSchema.safeParse(dataParsed);
+	if (!dataResult.success) {
+		return { status: "miss", reason: "not-found" };
+	}
+
+	const meta = metaResult.data._meta;
+	const data = dataResult.data;
+
 	// Check config hash
-	if (meta._meta.configHash !== configHash) {
+	if (meta.configHash !== configHash) {
 		return {
 			status: "miss",
 			reason: "config-hash-mismatch",
-			recordedHash: meta._meta.configHash,
+			recordedHash: meta.configHash,
 		};
 	}
 
 	// Check staleness
-	const recordedAt = new Date(meta._meta.recordedAt).getTime();
+	const recordedAt = new Date(meta.recordedAt).getTime();
 	const ageDays = (Date.now() - recordedAt) / MS_PER_DAY;
 
 	if (ageDays > options.ttlDays) {

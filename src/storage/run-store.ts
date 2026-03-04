@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { RunModeSchema, RunSchema } from "../config/schema.js";
@@ -32,8 +32,10 @@ export async function saveRun(run: Run, baseDir?: string): Promise<string> {
 	await mkdir(dir, { recursive: true });
 
 	const filePath = join(dir, `${run.id}.json`);
+	const tmpPath = `${filePath}.tmp`;
 	const content = JSON.stringify(run, null, 2);
-	await writeFile(filePath, content, "utf-8");
+	await writeFile(tmpPath, content, "utf-8");
+	await rename(tmpPath, filePath);
 
 	return filePath;
 }
