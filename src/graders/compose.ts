@@ -1,11 +1,15 @@
 import type { GradeResult, GraderFn } from "./types.js";
 
+function hasJudge(graders: readonly GraderFn[]): boolean {
+	return graders.some((g) => "requiresJudge" in g && g.requiresJudge === true);
+}
+
 /**
  * Conjunction: all graders must pass.
  * Score = minimum score. Does NOT short-circuit (all results needed for reporting).
  */
 export function all(graders: readonly GraderFn[]): GraderFn {
-	return async (output, expected, context) => {
+	const fn: GraderFn = async (output, expected, context) => {
 		if (graders.length === 0) {
 			return {
 				pass: true,
@@ -35,6 +39,8 @@ export function all(graders: readonly GraderFn[]): GraderFn {
 
 		return { pass: allPassed, score: minScore, reason, graderName };
 	};
+	if (hasJudge(graders)) return Object.assign(fn, { requiresJudge: true as const });
+	return fn;
 }
 
 /**
@@ -42,7 +48,7 @@ export function all(graders: readonly GraderFn[]): GraderFn {
  * Score = maximum score. Does NOT short-circuit.
  */
 export function any(graders: readonly GraderFn[]): GraderFn {
-	return async (output, expected, context) => {
+	const fn: GraderFn = async (output, expected, context) => {
 		if (graders.length === 0) {
 			return {
 				pass: false,
@@ -78,13 +84,15 @@ export function any(graders: readonly GraderFn[]): GraderFn {
 		const reason = results.map((f) => `${f.graderName}: ${f.reason}`).join("; ");
 		return { pass: false, score: maxScore, reason, graderName };
 	};
+	if (hasJudge(graders)) return Object.assign(fn, { requiresJudge: true as const });
+	return fn;
 }
 
 /**
  * Negation: inverts a grader's result.
  */
 export function not(grader: GraderFn): GraderFn {
-	return async (output, expected, context) => {
+	const fn: GraderFn = async (output, expected, context) => {
 		const result = await grader(output, expected, context);
 		return {
 			pass: !result.pass,
@@ -93,4 +101,8 @@ export function not(grader: GraderFn): GraderFn {
 			graderName: `not(${result.graderName})`,
 		};
 	};
+	if ("requiresJudge" in grader && grader.requiresJudge === true) {
+		return Object.assign(fn, { requiresJudge: true as const });
+	}
+	return fn;
 }

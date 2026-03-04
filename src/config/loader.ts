@@ -4,6 +4,7 @@ import { createJiti } from "jiti";
 import { assertSafeFixtureDir } from "../cli/resolve-fixture-dir.js";
 import type { EvalPlugin } from "../plugin/types.js";
 import { loadCases } from "./case-loader.js";
+import { CaseSchema } from "./schema.js";
 import type {
 	Case,
 	EvalConfig,
@@ -259,7 +260,7 @@ async function resolveCases(
 			const loaded = await loadCases(resolve(basePath, entry));
 			result.push(...loaded);
 		} else {
-			result.push(entry);
+			result.push(CaseSchema.parse(entry));
 		}
 	}
 

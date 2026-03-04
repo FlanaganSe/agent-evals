@@ -30,7 +30,12 @@ export async function resolveFixtureDir(configArg?: string): Promise<string> {
 		const options = await resolveConfigOptions(configArg);
 		const config = await loadConfig(options);
 		return config.fixtureDir;
-	} catch {
+	} catch (err) {
+		if (configArg) {
+			process.stderr.write(
+				`[warn] Failed to load config from "${configArg}", using default fixture dir: ${err instanceof Error ? err.message : String(err)}\n`,
+			);
+		}
 		return DEFAULT_FIXTURE_DIR;
 	}
 }

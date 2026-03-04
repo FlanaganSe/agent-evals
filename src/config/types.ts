@@ -167,10 +167,7 @@ export interface GraderContext {
 	readonly judge?: JudgeCallFn | undefined;
 }
 
-/**
- * Configuration for a grader within a suite or case.
- * When specified on a case, these graders replace (not merge with) the suite's defaultGraders.
- */
+/** Configuration for a grader within a suite. */
 export interface GraderConfig {
 	readonly grader: GraderFn;
 	/** Relative weight for scoring. Higher weight means more influence on the case score. @default 1.0 */
@@ -201,7 +198,7 @@ export interface SuiteConfig {
 	readonly target: Target;
 	/** Test cases: inline Case objects, file paths to JSONL/YAML files, or a single file path string. */
 	readonly cases: readonly (Case | string)[] | string;
-	/** Default graders applied to all cases in this suite. Replaced entirely if a case defines its own graders. */
+	/** Graders applied to all cases in this suite. */
 	readonly defaultGraders?: readonly GraderConfig[] | undefined;
 	/** Suite-level quality gates. All configured gates must pass for the suite to pass. */
 	readonly gates?: GateConfig | undefined;

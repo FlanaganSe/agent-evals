@@ -219,14 +219,28 @@ describe("parseJudgeResponse", () => {
 	});
 
 	describe("Reasoning truncation", () => {
-		it("truncates reasoning at 2000 chars", () => {
+		it("truncates reasoning at 2000 chars with ellipsis indicator", () => {
 			const longReasoning = "A".repeat(3000);
 			const text = JSON.stringify({ reasoning: longReasoning, score: 3 });
 			const result = parseJudgeResponse(text);
 
 			expect(result.success).toBe(true);
 			if (result.success) {
-				expect(result.parsed.reasoning.length).toBe(2000);
+				expect(result.parsed.reasoning).toHaveLength(2003);
+				expect(result.parsed.reasoning.endsWith("...")).toBe(true);
+				expect(result.parsed.reasoning.startsWith("A".repeat(2000))).toBe(true);
+			}
+		});
+
+		it("does not add ellipsis when reasoning fits within limit", () => {
+			const shortReasoning = "A".repeat(100);
+			const text = JSON.stringify({ reasoning: shortReasoning, score: 3 });
+			const result = parseJudgeResponse(text);
+
+			expect(result.success).toBe(true);
+			if (result.success) {
+				expect(result.parsed.reasoning).toBe(shortReasoning);
+				expect(result.parsed.reasoning.endsWith("...")).toBe(false);
 			}
 		});
 	});

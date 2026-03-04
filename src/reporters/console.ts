@@ -56,7 +56,9 @@ export function formatConsoleReport(run: Run, options?: ConsoleReportOptions): s
 				const reasoning = grade.metadata?.reasoning;
 				if (typeof reasoning === "string" && reasoning.length > 0) {
 					lines.push(`       ${c.dim(`→ ${grade.graderName}: ${grade.reason}`)}`);
-					lines.push(`         ${c.dim(`Reasoning: ${reasoning.slice(0, 200)}`)}`);
+					const truncated = reasoning.slice(0, 200);
+					const display = reasoning.length > 200 ? `${truncated}...` : truncated;
+					lines.push(`         ${c.dim(`Reasoning: ${display}`)}`);
 				}
 			}
 		}
@@ -93,12 +95,12 @@ export function formatConsoleReport(run: Run, options?: ConsoleReportOptions): s
 		lines.push(`Results: ${parts.join(" | ")}`);
 	}
 
-	// Compute judge cost from grade metadata
+	// Break out judge cost for display (totalCost already includes both)
 	const judgeCost = computeJudgeCost(run);
 	if (judgeCost > 0) {
-		const targetCost = run.summary.totalCost;
+		const targetCost = run.summary.totalCost - judgeCost;
 		lines.push(
-			`Cost: $${targetCost.toFixed(4)} (target) + $${judgeCost.toFixed(4)} (judge) = $${(targetCost + judgeCost).toFixed(4)} total | Duration: ${run.summary.totalDurationMs}ms`,
+			`Cost: $${targetCost.toFixed(4)} (target) + $${judgeCost.toFixed(4)} (judge) = $${run.summary.totalCost.toFixed(4)} total | Duration: ${run.summary.totalDurationMs}ms`,
 		);
 	} else {
 		lines.push(

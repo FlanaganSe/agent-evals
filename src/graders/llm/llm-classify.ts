@@ -51,6 +51,17 @@ export function llmClassify(options: LlmClassifyOptions): GraderFn {
 		throw new Error("llmClassify requires at least 2 categories");
 	}
 
+	const lowerNames = new Set<string>();
+	for (const name of categoryNames) {
+		const lower = name.toLowerCase();
+		if (lowerNames.has(lower)) {
+			throw new Error(
+				`llmClassify: duplicate category '${name}' (case-insensitive collision with existing key)`,
+			);
+		}
+		lowerNames.add(lower);
+	}
+
 	const graderFn = async (
 		output: TargetOutput,
 		expected: CaseExpected | undefined,
@@ -62,7 +73,7 @@ export function llmClassify(options: LlmClassifyOptions): GraderFn {
 				pass: false,
 				score: 0,
 				reason: "llmClassify requires a judge function. Configure judge in defineConfig().",
-				graderName: context.graderName,
+				graderName: "llm-classify",
 			};
 		}
 
@@ -83,7 +94,7 @@ export function llmClassify(options: LlmClassifyOptions): GraderFn {
 				pass: false,
 				score: 0,
 				reason: `Classification parse error: ${parsed.error}`,
-				graderName: context.graderName,
+				graderName: "llm-classify",
 				metadata: {
 					rawResponse: response.text.slice(0, 2000),
 					judgeCost: response.cost,
@@ -99,7 +110,7 @@ export function llmClassify(options: LlmClassifyOptions): GraderFn {
 			reason: isMatch
 				? `Classified as '${parsed.classification}' (expected: '${expectedCategory ?? "any"}')`
 				: `Classified as '${parsed.classification}', expected '${expectedCategory}'`,
-			graderName: context.graderName,
+			graderName: "llm-classify",
 			metadata: {
 				classification: parsed.classification,
 				reasoning: parsed.reasoning?.slice(0, 2000),

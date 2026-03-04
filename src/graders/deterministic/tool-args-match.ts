@@ -73,7 +73,7 @@ function matchArgs(
 				if (!deepEqual(actual[key], expected[key])) {
 					return {
 						pass: false,
-						reason: `Key "${key}": expected ${JSON.stringify(expected[key])}, got ${JSON.stringify(actual[key])}`,
+						reason: `Key "${key}": expected ${safeStringify(expected[key])}, got ${safeStringify(actual[key])}`,
 					};
 				}
 			}
@@ -91,7 +91,7 @@ function matchArgs(
 				if (!deepEqual(actual[key], expected[key])) {
 					return {
 						pass: false,
-						reason: `Key "${key}": expected ${JSON.stringify(expected[key])}, got ${JSON.stringify(actual[key])}`,
+						reason: `Key "${key}": expected ${safeStringify(expected[key])}, got ${safeStringify(actual[key])}`,
 					};
 				}
 			}
@@ -117,7 +117,7 @@ function matchArgs(
 				} else if (!deepEqual(actualVal, expectedVal)) {
 					return {
 						pass: false,
-						reason: `Key "${key}": expected ${JSON.stringify(expectedVal)}, got ${JSON.stringify(actualVal)}`,
+						reason: `Key "${key}": expected ${safeStringify(expectedVal)}, got ${safeStringify(actualVal)}`,
 					};
 				}
 			}
@@ -126,23 +126,42 @@ function matchArgs(
 	}
 }
 
-function deepEqual(a: unknown, b: unknown): boolean {
+function safeStringify(value: unknown): string {
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return "[circular]";
+	}
+}
+
+function deepEqual(
+	a: unknown,
+	b: unknown,
+	seenA: WeakSet<object> = new WeakSet(),
+	seenB: WeakSet<object> = new WeakSet(),
+): boolean {
 	if (a === b) return true;
 	if (a === null || b === null) return false;
 	if (typeof a !== typeof b) return false;
 
 	if (Array.isArray(a) && Array.isArray(b)) {
 		if (a.length !== b.length) return false;
-		return a.every((val, i) => deepEqual(val, b[i]));
+		if (seenA.has(a) || seenB.has(b)) return false;
+		seenA.add(a);
+		seenB.add(b);
+		return a.every((val, i) => deepEqual(val, b[i], seenA, seenB));
 	}
 
 	if (typeof a === "object" && typeof b === "object") {
+		if (seenA.has(a as object) || seenB.has(b as object)) return false;
+		seenA.add(a as object);
+		seenB.add(b as object);
 		const aObj = a as Record<string, unknown>;
 		const bObj = b as Record<string, unknown>;
 		const aKeys = Object.keys(aObj).sort();
 		const bKeys = Object.keys(bObj).sort();
 		if (aKeys.length !== bKeys.length) return false;
-		return aKeys.every((key) => deepEqual(aObj[key], bObj[key]));
+		return aKeys.every((key) => deepEqual(aObj[key], bObj[key], seenA, seenB));
 	}
 
 	return false;

@@ -27,6 +27,12 @@ export interface CompareOptions {
  * semantics and mean scores instead of raw trial-0 data.
  */
 export function compareRuns(base: Run, compare: Run, options?: CompareOptions): RunComparison {
+	if (base.suiteId !== compare.suiteId) {
+		throw new Error(
+			`Cannot compare runs from different suites: '${base.suiteId}' vs '${compare.suiteId}'`,
+		);
+	}
+
 	const threshold = options?.scoreThreshold ?? 0.05;
 
 	const baseTrials = buildCaseMap(base.trials, base.summary);

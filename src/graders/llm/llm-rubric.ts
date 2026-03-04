@@ -65,6 +65,14 @@ export function llmRubric(optionsOrCriteria: LlmRubricOptions | string): GraderF
 	const opts: LlmRubricOptions =
 		typeof optionsOrCriteria === "string" ? { criteria: optionsOrCriteria } : optionsOrCriteria;
 
+	if (opts.passThreshold !== undefined) {
+		if (!Number.isFinite(opts.passThreshold) || opts.passThreshold < 0 || opts.passThreshold > 1) {
+			throw new RangeError(
+				`passThreshold must be between 0 and 1, got ${String(opts.passThreshold)}`,
+			);
+		}
+	}
+
 	const graderName = "llm-rubric";
 
 	const graderFn = async (

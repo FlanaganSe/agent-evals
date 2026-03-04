@@ -77,9 +77,9 @@ Composition operators do **not** short-circuit — all inner graders run, and al
 | `any` | maximum of all scores | fail |
 | `not` | `1 - original` | — |
 
-## Case-level graders
+## Suite-level graders
 
-Cases can override suite graders entirely. When a case defines its own graders, the suite's `defaultGraders` are **replaced**, not merged:
+All grading configuration is at the suite level via `defaultGraders`. Every case in the suite is evaluated with the same set of graders:
 
 ```typescript
 suites: [
@@ -87,11 +87,8 @@ suites: [
     name: "smoke",
     target: myTarget,
     cases: [
-      {
-        id: "special",
-        input: { prompt: "test" },
-        // This case uses ONLY exactMatch — suite defaults are ignored
-      },
+      { id: "greeting", input: { prompt: "Say hello" } },
+      { id: "special", input: { prompt: "test" } },
     ],
     defaultGraders: [
       { grader: contains("hello") },
@@ -101,7 +98,7 @@ suites: [
 ]
 ```
 
-This keeps cases self-contained and predictable.
+To evaluate different cases with different graders, split them into separate suites.
 
 ## Scoring algorithm
 

@@ -77,9 +77,9 @@ defaultGraders: [
 
 The final case score is a weighted average. Required graders that fail cause an immediate score of 0 regardless of other graders. The case passes if the weighted score meets the pass threshold (default: 0.5, or the minimum of all configured grader thresholds).
 
-## Case Graders vs Suite Graders
+## Suite-Level Graders
 
-Cases can define their own graders, which **replace** (not merge with) the suite's `defaultGraders`. This makes each case self-contained and predictable.
+All grading configuration is at the suite level via `defaultGraders`. Every case in a suite is evaluated with the same graders. To use different graders for different cases, split them into separate suites.
 
 ## Gates
 

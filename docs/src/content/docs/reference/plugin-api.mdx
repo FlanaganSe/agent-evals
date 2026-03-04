@@ -88,8 +88,8 @@ interface AfterTrialContext {
 ## Hook execution order
 
 - Hooks execute sequentially in plugin registration order
-- `beforeRun` and `afterRun` errors **propagate** — a failing hook stops the run
-- `afterTrial` errors are **caught and logged** — they don't interrupt the run
+- `beforeRun` errors **propagate** — a failing hook stops the run
+- `afterTrial` and `afterRun` errors are **caught and logged** — they don't interrupt the run
 
 ## Validation rules
 

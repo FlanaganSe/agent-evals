@@ -22,12 +22,16 @@ export async function runJudgeOnly(options: JudgeOnlyOptions): Promise<readonly 
 	const expectedByCaseId = new Map(suiteConfig.cases.map((c) => [c.id, c.expected]));
 
 	for (const trial of previousRun.trials) {
+		if (!expectedByCaseId.has(trial.caseId)) {
+			process.stderr.write(
+				`[warn] Case '${trial.caseId}' from previous run not found in current suite config. Grading with no expected value.\n`,
+			);
+		}
 		const expected = expectedByCaseId.get(trial.caseId);
 
 		const pipelineResult = await runGraderPipeline(
 			trial.output,
 			expected,
-			undefined,
 			suiteConfig.defaultGraders,
 			{
 				caseId: trial.caseId,

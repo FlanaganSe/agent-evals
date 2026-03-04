@@ -132,8 +132,9 @@ function tryPatternMatch(text: string): ParsedJudgeResponse | null {
 
 	if (!reasoning) return null;
 
+	const trimmed = reasoning.slice(0, MAX_REASONING_LENGTH);
 	return {
-		reasoning: reasoning.slice(0, MAX_REASONING_LENGTH),
+		reasoning: reasoning.length > MAX_REASONING_LENGTH ? `${trimmed}...` : trimmed,
 		score,
 		rawText: text,
 	};
@@ -159,8 +160,10 @@ function validateParsed(obj: unknown, rawText: string): ParsedJudgeResponse | nu
 		return null;
 	}
 
+	const trimmed = rawReasoning.trim();
+	const truncated = trimmed.slice(0, MAX_REASONING_LENGTH);
 	return {
-		reasoning: rawReasoning.trim().slice(0, MAX_REASONING_LENGTH),
+		reasoning: trimmed.length > MAX_REASONING_LENGTH ? `${truncated}...` : truncated,
 		score: rawScore as 1 | 2 | 3 | 4,
 		rawText,
 	};

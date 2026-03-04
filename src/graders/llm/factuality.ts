@@ -73,6 +73,18 @@ const FACTUALITY_EXAMPLES = [
  * ```
  */
 export function factuality(options?: FactualityOptions): GraderFn {
+	if (options?.passThreshold !== undefined) {
+		if (
+			!Number.isFinite(options.passThreshold) ||
+			options.passThreshold < 0 ||
+			options.passThreshold > 1
+		) {
+			throw new RangeError(
+				`passThreshold must be between 0 and 1, got ${String(options.passThreshold)}`,
+			);
+		}
+	}
+
 	const inner = llmRubric({
 		criteria: FACTUALITY_CRITERIA,
 		examples: FACTUALITY_EXAMPLES,

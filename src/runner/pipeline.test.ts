@@ -29,7 +29,6 @@ describe("runGraderPipeline", () => {
 		const result = await runGraderPipeline(
 			output,
 			undefined,
-			undefined,
 			[passingConfig, passingConfig],
 			pipelineCtx,
 		);
@@ -37,37 +36,15 @@ describe("runGraderPipeline", () => {
 		expect(result.caseResult.pass).toBe(true);
 	});
 
-	it("case graders replace suite defaults", async () => {
-		const caseGraders: readonly GraderConfig[] = [passingConfig];
-		const suiteGraders: readonly GraderConfig[] = [failingConfig];
-
-		const result = await runGraderPipeline(
-			output,
-			undefined,
-			caseGraders,
-			suiteGraders,
-			pipelineCtx,
-		);
+	it("uses provided graders", async () => {
+		const result = await runGraderPipeline(output, undefined, [passingConfig], pipelineCtx);
 		expect(result.grades).toHaveLength(1);
 		expect(result.caseResult.pass).toBe(true);
-	});
-
-	it("uses suite defaults when no case graders", async () => {
-		const result = await runGraderPipeline(
-			output,
-			undefined,
-			undefined,
-			[failingConfig],
-			pipelineCtx,
-		);
-		expect(result.grades).toHaveLength(1);
-		expect(result.caseResult.pass).toBe(false);
 	});
 
 	it("handles mixed required + optional graders", async () => {
 		const result = await runGraderPipeline(
 			output,
-			undefined,
 			undefined,
 			[passingConfig, failingConfig],
 			pipelineCtx,
@@ -77,7 +54,13 @@ describe("runGraderPipeline", () => {
 	});
 
 	it("passes with empty graders list", async () => {
-		const result = await runGraderPipeline(output, undefined, undefined, [], pipelineCtx);
+		const result = await runGraderPipeline(output, undefined, [], pipelineCtx);
+		expect(result.grades).toHaveLength(0);
+		expect(result.caseResult.pass).toBe(true);
+	});
+
+	it("passes with undefined graders", async () => {
+		const result = await runGraderPipeline(output, undefined, undefined, pipelineCtx);
 		expect(result.grades).toHaveLength(0);
 		expect(result.caseResult.pass).toBe(true);
 	});
@@ -91,7 +74,6 @@ describe("runGraderPipeline", () => {
 
 		const result = await runGraderPipeline(
 			output,
-			undefined,
 			undefined,
 			[throwingConfig, passingConfig],
 			pipelineCtx,
@@ -114,13 +96,7 @@ describe("runGraderPipeline", () => {
 			},
 		};
 
-		const result = await runGraderPipeline(
-			output,
-			undefined,
-			undefined,
-			[throwingConfig],
-			pipelineCtx,
-		);
+		const result = await runGraderPipeline(output, undefined, [throwingConfig], pipelineCtx);
 		expect(result.grades[0]?.reason).toContain("Grader error: string error");
 	});
 });

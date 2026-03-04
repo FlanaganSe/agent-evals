@@ -324,18 +324,12 @@ async function executeCase(
 	}
 
 	const durationMs = Date.now() - caseStart;
-	const pipelineResult = await runGraderPipeline(
-		output,
-		testCase.expected,
-		undefined,
-		suite.defaultGraders,
-		{
-			caseId: testCase.id,
-			suiteId: suite.name,
-			mode: options.mode,
-			judge: options.judge,
-		},
-	);
+	const pipelineResult = await runGraderPipeline(output, testCase.expected, suite.defaultGraders, {
+		caseId: testCase.id,
+		suiteId: suite.name,
+		mode: options.mode,
+		judge: options.judge,
+	});
 
 	const status = pipelineResult.caseResult.pass ? "pass" : "fail";
 
@@ -389,7 +383,17 @@ function computePartialSummary(
 	trialStats: Record<string, import("./statistics.js").TrialStats> | undefined,
 	aborted: boolean,
 ): Omit<RunSummary, "gateResult"> {
-	const totalCost = trials.reduce((sum, t) => sum + (t.output.cost ?? 0), 0);
+	const targetCost = trials.reduce((sum, t) => sum + (t.output.cost ?? 0), 0);
+	const judgeCost = trials.reduce(
+		(sum, t) =>
+			sum +
+			t.grades.reduce((gs, g) => {
+				const jc = g.metadata?.judgeCost;
+				return gs + (typeof jc === "number" ? jc : 0);
+			}, 0),
+		0,
+	);
+	const totalCost = targetCost + judgeCost;
 	const p95LatencyMs = computeP95(trials.map((t) => t.output.latencyMs));
 	const byCategory = computeByCategory(trials, cases, trialStats);
 

@@ -93,7 +93,7 @@ src/
 ├── plugin/           Plugin type definitions + hook dispatcher
 ├── mcp/              MCP server: 8 tools, 3 resources, stdio transport
 │   └── tools/        Each tool handler is (args, cwd) => Promise<ToolResult> — testable without SDK
-└── watcher/          File watcher for --watch mode (filters .ts, .js, .jsonl, .yaml)
+└── watcher/          File watcher for --watch mode (filters .ts, .js, .jsonl, .yaml, .yml)
 
 bin/cli.mjs           5-line shim: dynamic import of dist/cli/index.js
 docs/                 Astro/Starlight documentation site (separate node_modules)
@@ -154,7 +154,7 @@ Config is closed over at creation time. The returned `GraderFn` is a pure functi
 **Deterministic — Metrics**: `latency`, `cost`, `tokenCount`
 **Deterministic — Safety**: `safetyKeywords`, `noHallucinatedNumbers`
 
-**LLM-as-judge**: `llmRubric` (4-point scale → 0/0.33/0.67/1.0), `factuality` (requires `expected.text`), `llmClassify` (N categories)
+**LLM-as-judge**: `llmRubric` (4-point scale → 0.25/0.50/0.75/1.00), `factuality` (requires `expected.text`), `llmClassify` (N categories)
 
 **Composition**: `all()` (min score), `any()` (max score), `not()` (inverted pass, 1-score). None short-circuit — all graders always run so every result appears in the report for debugging.
 
@@ -212,7 +212,7 @@ interface EvalPlugin {
 
 Plugins are plain objects — no classes, no inheritance, no registration API. Pass them in `defineConfig({ plugins: [...] })`. Hooks are called sequentially in registration order.
 
-**Error semantics**: `afterTrial` errors are logged and swallowed (non-breaking — a flaky telemetry hook must not fail the evaluation). `beforeRun` and `afterRun` errors propagate and fail the run. This asymmetry is intentional: setup and teardown failures indicate real problems, but mid-run observability failures should degrade gracefully.
+**Error semantics**: `beforeRun` errors propagate and fail the run — setup failures indicate real problems. `afterTrial` and `afterRun` errors are logged and swallowed (non-breaking — a flaky telemetry or cleanup hook must not fail the evaluation).
 
 The built-in `createProgressPlugin()` is implemented as a plugin — it uses `afterTrial` to render a progress bar to stderr.
 

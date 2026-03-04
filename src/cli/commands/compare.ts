@@ -48,13 +48,6 @@ export async function executeCompare(args: ExecuteCompareArgs): Promise<void> {
 			);
 		});
 
-		// Warn if runs are from different suites
-		if (baseRun.suiteId !== compareRun.suiteId) {
-			logger.warn(
-				`Comparing runs from different suites: '${baseRun.suiteId}' vs '${compareRun.suiteId}'`,
-			);
-		}
-
 		let scoreThreshold: number | undefined;
 		if (args["score-threshold"]) {
 			scoreThreshold = Number(args["score-threshold"]);

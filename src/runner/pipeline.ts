@@ -24,18 +24,14 @@ export interface PipelineContext {
 
 /**
  * Runs all graders against a target output and computes the aggregate result.
- *
- * Grader merging: case graders replace suite defaults entirely.
- * If caseGraders is non-empty, suiteGraders are ignored.
  */
 export async function runGraderPipeline(
 	output: TargetOutput,
 	expected: CaseExpected | undefined,
-	caseGraders: readonly GraderConfig[] | undefined,
-	suiteGraders: readonly GraderConfig[] | undefined,
+	graders: readonly GraderConfig[] | undefined,
 	context: PipelineContext,
 ): Promise<PipelineResult> {
-	const configs = caseGraders && caseGraders.length > 0 ? caseGraders : (suiteGraders ?? []);
+	const configs = graders ?? [];
 
 	const grades: GradeResult[] = [];
 
@@ -44,7 +40,7 @@ export async function runGraderPipeline(
 			caseId: context.caseId,
 			suiteId: context.suiteId,
 			mode: context.mode,
-			graderName: "", // Grader sets this in its result
+			graderName: config.grader.name || "unknown",
 			judge: context.judge,
 		};
 
@@ -57,7 +53,7 @@ export async function runGraderPipeline(
 				pass: false,
 				score: 0,
 				reason: `Grader error: ${message}`,
-				graderName: graderContext.graderName || "unknown",
+				graderName: graderContext.graderName,
 				metadata: { error: true },
 			});
 		}

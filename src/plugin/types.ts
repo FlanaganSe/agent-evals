@@ -38,6 +38,7 @@ export interface PluginHooks {
 	/**
 	 * Called after the entire run completes (including aborted runs).
 	 * Use for cleanup: telemetry end, resource disposal, summary notifications.
+	 * Must not throw — errors are logged and swallowed to avoid breaking the pipeline.
 	 */
 	readonly afterRun?: (run: Run) => Promise<void>;
 }

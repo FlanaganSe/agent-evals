@@ -100,6 +100,20 @@ describe("toolArgsMatch — edge cases", () => {
 		expect(result.pass).toBe(true);
 	});
 
+	it("handles circular references without stack overflow", async () => {
+		const actual: Record<string, unknown> = { name: "test" };
+		actual.self = actual;
+		const expected: Record<string, unknown> = { name: "test" };
+		expected.self = expected;
+		const circularOutput: TargetOutput = {
+			toolCalls: [{ name: "search", args: actual }],
+			latencyMs: 0,
+		};
+		// Should not throw — circular reference protection returns false for cycles
+		const result = await toolArgsMatch("search", expected, "exact")(circularOutput, undefined, ctx);
+		expect(result.pass).toBe(false);
+	});
+
 	it("default mode is subset", async () => {
 		const result = await toolArgsMatch("search", { query: "weather in Seattle" })(
 			output,

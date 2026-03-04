@@ -85,5 +85,6 @@ export function createFileWatcher(options: FileWatcherOptions): FileWatcher {
 }
 
 function shouldIgnore(filePath: string, ignorePatterns: readonly string[]): boolean {
-	return ignorePatterns.some((pattern) => filePath.includes(pattern));
+	const segments = filePath.split("/");
+	return ignorePatterns.some((pattern) => segments.includes(pattern));
 }

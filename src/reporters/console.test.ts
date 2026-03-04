@@ -188,6 +188,41 @@ describe("formatConsoleReport", () => {
 		expect(output).toContain("correctly addresses");
 	});
 
+	it("truncates long reasoning with ellipsis in verbose mode", () => {
+		const longReasoning = "X".repeat(300);
+		const run = makeRun({
+			trials: [
+				{
+					caseId: "J01",
+					status: "pass",
+					output: { latencyMs: 100, cost: 0.001 },
+					grades: [
+						{
+							pass: true,
+							score: 0.75,
+							reason: "Score 3/4",
+							graderName: "llm-rubric",
+							metadata: { reasoning: longReasoning },
+						},
+					],
+					score: 0.75,
+					durationMs: 100,
+				},
+			],
+			summary: {
+				...makeRun().summary,
+				totalCases: 1,
+				passed: 1,
+				failed: 0,
+			},
+		});
+		const output = formatConsoleReport(run, { color: false, verbose: true });
+		expect(output).toContain("Reasoning:");
+		expect(output).toContain("...");
+		// Should not contain the full 300-char string
+		expect(output).not.toContain(longReasoning);
+	});
+
 	it("does not show reasoning without verbose flag", () => {
 		const run = makeRun({
 			trials: [

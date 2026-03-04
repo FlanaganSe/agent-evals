@@ -221,9 +221,24 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 			previousRun = await loadRun(args["run-id"], runDir);
 		}
 
-		// Cost confirmation
+		// Resolve failing case IDs once (before cost estimation)
+		let failingIds: ReadonlySet<string> | undefined;
+		if (args["filter-failing"]) {
+			failingIds = await resolveFailingFilter(args["filter-failing"], runDir);
+		}
+
+		// Apply case filters to get accurate cost estimates
+		const applyCaseFilters = (suite: ResolvedSuite): ResolvedSuite => {
+			if (failingIds) return filterCasesByIds(suite, failingIds);
+			if (args.filter) return filterCases(suite, args.filter);
+			return suite;
+		};
+
+		// Cost confirmation (uses filtered case counts)
 		if (args["confirm-cost"]) {
-			for (const suite of suites) {
+			for (const rawSuite of suites) {
+				const suite = applyCaseFilters(rawSuite);
+				if (suite.cases.length === 0) continue;
 				const estimate = estimateCost(suite, {
 					mode: parseMode(args.mode) ?? validatedConfig.run.defaultMode,
 					trials: parseIntArg(args.trials, "trials"),
@@ -249,26 +264,19 @@ export async function executeRun(args: ExecuteRunArgs): Promise<void> {
 		}
 
 		for (const rawSuite of suites) {
-			let suite = rawSuite;
-
 			// Validate previousRun matches this suite
-			if (previousRun && previousRun.suiteId !== suite.name) {
+			if (previousRun && previousRun.suiteId !== rawSuite.name) {
 				logger.warn(
-					`Skipping suite '${suite.name}': --run-id references suite '${previousRun.suiteId}'`,
+					`Skipping suite '${rawSuite.name}': --run-id references suite '${previousRun.suiteId}'`,
 				);
 				continue;
 			}
 
 			// Apply case filters
-			if (args["filter-failing"]) {
-				const failingIds = await resolveFailingFilter(args["filter-failing"]);
-				suite = filterCasesByIds(suite, failingIds);
-				if (suite.cases.length === 0) {
-					logger.info(`No failing cases in suite '${suite.name}' — skipping.`);
-					continue;
-				}
-			} else if (args.filter) {
-				suite = filterCases(suite, args.filter);
+			const suite = applyCaseFilters(rawSuite);
+			if (failingIds && suite.cases.length === 0) {
+				logger.info(`No failing cases in suite '${rawSuite.name}' — skipping.`);
+				continue;
 			}
 
 			// Warn about live mode trials cost
@@ -340,8 +348,9 @@ async function loadConfigSafe(configArg: string | undefined): Promise<ValidatedC
 		const resolved = await resolveConfigInput(configArg);
 		return await loadConfig(resolved);
 	} catch (err) {
+		const pathHint = configArg ? ` (from "${configArg}")` : "";
 		throw new ConfigError(
-			`Failed to load config: ${err instanceof Error ? err.message : String(err)}`,
+			`Failed to load config${pathHint}: ${err instanceof Error ? err.message : String(err)}`,
 		);
 	}
 }
