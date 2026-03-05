@@ -89,7 +89,7 @@ Supported hook managers:
 - **simple-git-hooks** — adds to `package.json`
 - **Raw git hook** — creates `.git/hooks/pre-push`
 
-The hook runs `agent-eval-kit run --mode=replay --quiet`. Failed gates block the push. All installers are idempotent.
+The hook runs `<runner> agent-eval-kit run --mode=replay --quiet`, where the runner (`npx`, `pnpm`, etc.) is auto-detected. Failed gates block the push. All installers are idempotent.
 
 ## Comparing across runs
 

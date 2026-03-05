@@ -107,7 +107,7 @@ Each entry in `defaultGraders` wraps a grader function with execution metadata:
 | `grader` | `GraderFn` | (required) | The grader function (e.g., `contains("hello")`) |
 | `weight` | `number` | `1.0` | Weight in the weighted average score |
 | `required` | `boolean` | `false` | If `true`, failure causes immediate score 0 |
-| `threshold` | `number` | — | Per-grader pass threshold |
+| `threshold` | `number` | `0.5` | Per-grader pass threshold |
 
 ## Case format
 
@@ -159,7 +159,7 @@ interface TargetOutput {
   latencyMs: number;         // Response latency (required)
   raw?: unknown;             // Raw API response (stripped in fixtures if configured)
   toolCalls?: ToolCall[];    // Tool/function calls made
-  tokenUsage?: TokenUsage;   // Token counts { input: number, output: number }
+  tokenUsage?: TokenUsage;   // Token counts { input?: number, output?: number }
   cost?: number;             // Estimated cost in USD
 }
 ```

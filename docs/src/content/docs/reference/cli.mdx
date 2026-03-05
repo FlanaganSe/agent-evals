@@ -181,7 +181,7 @@ agent-eval-kit install-hooks [options]
 | `--cwd` | string | Working directory |
 | `--manager` | string | Force hook manager: `husky`, `lefthook`, `simple-git-hooks`, or `none` (raw git hook) |
 
-Auto-detects your hook manager if `--manager` is not specified. All installers are idempotent — safe to run multiple times. The hook runs `agent-eval-kit run --mode=replay --quiet` on pre-push.
+Auto-detects your hook manager if `--manager` is not specified. All installers are idempotent — safe to run multiple times. The hook runs `<runner> agent-eval-kit run --mode=replay --quiet` on pre-push, where the runner (`npx`, `pnpm`, etc.) is auto-detected.
 
 ### `mcp`
 

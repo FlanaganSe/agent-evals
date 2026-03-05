@@ -189,7 +189,7 @@ const interval = wilsonInterval(successes, total, 1.96);
 ```typescript
 import { createFileWatcher } from "agent-eval-kit";
 
-const watcher = await createFileWatcher({
+const watcher = createFileWatcher({
   paths: ["/path/to/project"],
   debounceMs: 300,
 });
