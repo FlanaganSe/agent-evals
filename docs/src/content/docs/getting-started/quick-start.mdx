@@ -48,8 +48,8 @@ export default defineConfig({
 Create `cases/smoke.jsonl`:
 
 ```jsonl
-{"id": "greeting", "input": {"prompt": "Say hello to the user"}, "expected": {"text": "hello"}}
-{"id": "farewell", "input": {"prompt": "Say goodbye to the user"}, "expected": {"text": "goodbye"}}
+{"id": "greeting", "input": {"prompt": "Say hello"}, "expected": {"text": "hello"}}
+{"id": "farewell", "input": {"prompt": "Say goodbye"}, "expected": {"text": "goodbye"}}
 ```
 
 Or use YAML (`cases/smoke.yaml`):
@@ -57,13 +57,13 @@ Or use YAML (`cases/smoke.yaml`):
 ```yaml
 - id: greeting
   input:
-    prompt: "Say hello to the user"
+    prompt: "Say hello"
   expected:
     text: "hello"
 
 - id: farewell
   input:
-    prompt: "Say goodbye to the user"
+    prompt: "Say goodbye"
   expected:
     text: "goodbye"
 ```
